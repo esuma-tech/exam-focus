@@ -8,14 +8,21 @@ venv/
 *.db.bak
 .bak
 .env
-backend/uploads/*
-!backend/uploads/.gitkeep
+.env.local
+
+# Neon CLI local state
+.neon
+.neon/
 
 # Node
 node_modules/
 frontend/dist/
 npm-debug.log*
 yarn-error.log*
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
 
 # Editors / OS
 .vscode/
