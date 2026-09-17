@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .database import Base, engine
+from .database import Base, engine, run_migrations
 from .routers import (
     analytics,
     auth,
@@ -39,6 +39,7 @@ app.add_middleware(
 )
 
 Base.metadata.create_all(bind=engine)
+run_migrations()
 
 for r in (auth.router, users.router, courses.router, enrollments.router, quizzes.router,
           forum.router, notifications.router, live.router, analytics.router, uploads.router, system.router):

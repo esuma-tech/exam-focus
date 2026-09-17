@@ -229,6 +229,7 @@ class LiveClass(Base, TimestampMixin):
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     provider: Mapped[str] = mapped_column(String(16), default="jitsi", nullable=False)
     meeting_url: Mapped[str] = mapped_column(String(1024), default="", nullable=False)
+    invite_key: Mapped[str] = mapped_column(String(16), index=True, default="", nullable=False)
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     duration_min: Mapped[int] = mapped_column(Integer, default=60)
     status: Mapped[str] = mapped_column(String(16), default="scheduled")  # scheduled | live | ended | cancelled

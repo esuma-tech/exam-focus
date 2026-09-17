@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../../api'
 import { useAuth } from '../../store'
 import { ErrorBox, Loading, SubjectDot } from '../../components/ui'
+import LiveManager from '../../components/LiveManager'
 
 const SUBJECTS = ['Mathematics', 'English', 'Physics', 'Chemistry', 'Biology', 'Geography', 'History', 'Economics', 'Aptitude']
 const GRADES = ['Grade 9', 'Grade 10', 'Grade 11', 'Grade 12']
@@ -242,7 +243,7 @@ export default function CourseBuilder() {
           </div>
 
           <QuizCreator courseId={Number(id)} />
-          <LiveScheduler courseId={Number(id)} />
+          <LiveManager courseId={Number(id)} className="mt-8" showCreate={!isNew} />
         </>
       )}
     </div>
@@ -318,52 +319,3 @@ function QuizCreator({ courseId }) {
   )
 }
 
-function LiveScheduler({ courseId }) {
-  const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ title: '', description: '', scheduled_at: '', duration_min: 60 })
-  const [msg, setMsg] = useState('')
-  const [error, setError] = useState('')
-
-  const submit = async () => {
-    setError('')
-    try {
-      const created = await api('/live', {
-        method: 'POST',
-        body: { ...form, duration_min: Number(form.duration_min), course_id: courseId, scheduled_at: new Date(form.scheduled_at).toISOString() },
-      })
-      setMsg(`Scheduled. Meeting link: ${created.meeting_url}`)
-      setOpen(false)
-    } catch (e) {
-      setError(e.message)
-    }
-  }
-
-  if (!open) {
-    return (
-      <div className="mt-8 flex items-center justify-between">
-        <h2 className="text-xl font-black text-navy-900">Live classes</h2>
-        <div className="flex items-center gap-3">
-          {msg && <span className="max-w-xs truncate text-xs font-semibold text-emerald-600">{msg}</span>}
-          <button onClick={() => setOpen(true)} className="btn-outline">+ Schedule live class</button>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="card mt-8 p-6">
-      <h2 className="font-black text-navy-900">Schedule a live class</h2>
-      <ErrorBox error={error} />
-      <input className="input mt-4" placeholder="Class title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-      <textarea className="input mt-2" rows={2} placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <input className="input" type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} />
-        <input className="input" type="number" value={form.duration_min} onChange={(e) => setForm({ ...form, duration_min: e.target.value })} />
-      </div>
-      <div className="mt-4 flex gap-2">
-        <button className="btn-navy" onClick={submit}>Schedule & notify students</button>
-        <button className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
-      </div>
-    </div>
-  )
-}

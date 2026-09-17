@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import get_settings
@@ -28,3 +28,20 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def run_migrations() -> None:
+    """Idempotent, lightweight schema updates for pre-existing databases.
+
+    create_all() only adds brand-new tables, so columns added to existing tables
+    afterwards must be applied explicitly here (safe to call on every boot).
+    """
+    with engine.begin() as conn:
+        try:
+            tables = inspect(conn).get_table_names()
+        except Exception:
+            return
+        if "live_classes" in tables:
+            cols = {c["name"] for c in inspect(conn).get_columns("live_classes")}
+            if "invite_key" not in cols:
+                conn.execute(text("ALTER TABLE live_classes ADD COLUMN invite_key VARCHAR(16) DEFAULT ''"))

@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../store'
 import { ErrorBox } from '../components/ui'
 
 export default function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(params.get('expired') ? 'Your session expired. Please log in again.' : '')
   const [busy, setBusy] = useState(false)
 
   const submit = async (e) => {

@@ -17,7 +17,37 @@ export function clearTokens() {
   localStorage.removeItem('ef_refresh')
 }
 
-export async function api(path, { method = 'GET', body, form } = {}) {
+// Try to exchange the saved refresh token for a fresh access token. Returns
+// true when it succeeds (a single in-flight refresh is shared by all callers).
+let refreshing = null
+async function tryRefresh() {
+  const refresh_token = localStorage.getItem('ef_refresh')
+  if (!refresh_token) return false
+  if (!refreshing) {
+    refreshing = fetch(`${BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token }),
+    })
+      .then(async (res) => {
+        if (!res.ok) return false
+        const data = await res.json()
+        setTokens(data)
+        return true
+      })
+      .catch(() => false)
+      .finally(() => {
+        refreshing = null
+      })
+  }
+  return refreshing
+}
+
+async function readDetail(res) {
+  return res.json().catch(() => ({}))
+}
+
+export async function api(path, { method = 'GET', body, form, _retry = true } = {}) {
   const headers = {}
   const token = getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
@@ -30,13 +60,26 @@ export async function api(path, { method = 'GET', body, form } = {}) {
     body: form ? form : body !== undefined ? JSON.stringify(body) : undefined,
   })
 
+  // Login is the only place a 401 is an *expected* outcome — surface the real
+  // reason instead of a confusing "Session expired" message.
+  if (res.status === 401 && path === '/auth/login') {
+    const data = await readDetail(res)
+    throw new Error(data.detail || 'Invalid email or password')
+  }
+
   if (res.status === 401) {
+    if (_retry && (await tryRefresh())) {
+      return api(path, { method, body, form, _retry: false })
+    }
     clearTokens()
-    if (!location.pathname.startsWith('/login')) location.href = '/login'
+    if (location.pathname !== '/login') {
+      location.href = '/login?expired=1'
+    }
     throw new Error('Session expired')
   }
+
   if (res.status === 204) return null
-  const data = await res.json().catch(() => ({}))
+  const data = await readDetail(res)
   if (!res.ok) {
     const detail = Array.isArray(data.detail)
       ? data.detail.map((d) => d.msg).join('; ')

@@ -28,7 +28,7 @@ def seed_all() -> None:
             tagline="Focused Preparation. Real Results.",
             mission=("To give Grade 9–12 students affordable, structured, teacher-led online classes and exam "
                      "preparation."),
-            about="EXAM FOCUS is an online teaching and learning platform serving Grade 9–12 students.",
+            about="EXAM FOCUS is an online teaching and learning platform serving Grade 9–12 students. initiated and prepared by Mr Haile or Sir Haile here to help students achieve better grades ",
             address="",
             phone="",
             email=ADMIN_EMAIL,

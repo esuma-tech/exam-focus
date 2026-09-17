@@ -34,6 +34,7 @@ function NavLinks({ user, onNavigate }) {
         <>
           {link('/instructor', 'Overview')}
           {link('/instructor/courses', 'My Courses')}
+          {link('/instructor/live', 'Live Classes')}
           {link('/instructor/courses/new', 'Build Course')}
         </>
       ) : user?.role === 'admin' ? (

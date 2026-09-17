@@ -307,12 +307,26 @@ class LiveClassIn(BaseModel):
     provider: str = "jitsi"
 
 
+class LiveClassUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    scheduled_at: datetime | None = None
+    duration_min: int | None = None
+    status: str | None = None
+    recording_url: str | None = None
+
+
+class LiveJoinIn(BaseModel):
+    code: str
+
+
 class LiveClassOut(ORMModel):
     id: int
     title: str
     description: str
     provider: str
     meeting_url: str
+    invite_key: str
     scheduled_at: datetime
     duration_min: int
     status: str

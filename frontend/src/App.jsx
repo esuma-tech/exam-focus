@@ -14,6 +14,7 @@ import MyCourses from './pages/learn/MyCourses'
 import LiveClasses from './pages/learn/LiveClasses'
 import InstructorDashboard from './pages/dashboards/InstructorDashboard'
 import CourseBuilder from './pages/instructor/CourseBuilder'
+import InstructorLive from './pages/instructor/InstructorLive'
 import AdminDashboard from './pages/dashboards/AdminDashboard'
 import AdminUsers from './pages/admin/AdminUsers'
 import Notifications from './pages/Notifications'
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="instructor" element={<Protected roles={['instructor', 'admin']}><InstructorDashboard /></Protected>} />
         <Route path="instructor/courses" element={<Protected roles={['instructor', 'admin']}><CourseBuilder /></Protected>} />
         <Route path="instructor/courses/:id" element={<Protected roles={['instructor', 'admin']}><CourseBuilder /></Protected>} />
+        <Route path="instructor/live" element={<Protected roles={['instructor', 'admin']}><InstructorLive /></Protected>} />
 
         {/* Admin */}
         <Route path="admin" element={<Protected roles={['admin']}><AdminDashboard /></Protected>} />
