@@ -16,9 +16,12 @@ venv/
 
 # Node
 node_modules/
-frontend/dist/
 npm-debug.log*
 yarn-error.log*
+
+# Committed frontend build (served by the backend in production)
+!frontend/dist/
+frontend/dist/*.map
 
 # Uploads
 backend/uploads/*

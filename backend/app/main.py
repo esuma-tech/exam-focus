@@ -1,5 +1,9 @@
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .database import Base, engine
@@ -48,6 +52,23 @@ def on_startup():
     seed_all()
 
 
-@app.get("/", include_in_schema=False)
-def root():
-    return {"app": settings.APP_NAME, "docs": "/docs", "health": f"{settings.API_PREFIX}/health"}
+# Serve the built React app (frontend/dist) from the same origin so visiting
+# the base URL opens the real web application. Falls back to a JSON info root
+# when the frontend build is not present (e.g. API-only deploys).
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if FRONTEND_DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
+        dist_root = FRONTEND_DIST.resolve()
+        candidate = (dist_root / full_path).resolve()
+        if full_path and candidate.is_file() and dist_root in candidate.parents:
+            return FileResponse(candidate)
+        return FileResponse(dist_root / "index.html")
+else:
+    @app.get("/", include_in_schema=False)
+    def root():
+        return {"app": settings.APP_NAME, "docs": "/docs", "health": f"{settings.API_PREFIX}/health"}
