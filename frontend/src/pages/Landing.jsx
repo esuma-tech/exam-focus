@@ -60,32 +60,24 @@ export default function Landing() {
   return (
     <div>
       {/* HERO */}
-      <section className="relative overflow-hidden bg-navy-950 text-white">
+      <section className="relative overflow-hidden bg-gradient-to-br from-white via-mint-50 to-mint-100 text-navy-900">
         <div className="absolute inset-0">
-          <div className="absolute -right-40 -top-40 h-[32rem] w-[32rem] rounded-full bg-navy-700/40 blur-3xl" />
-          <div className="absolute -bottom-40 -left-40 h-[32rem] w-[32rem] rounded-full bg-gold-500/20 blur-3xl" />
-          <div
-            className="absolute inset-0 opacity-[0.07]"
-            style={{
-              backgroundImage:
-                'linear-gradient(white 1px, transparent 1px), linear-gradient(90deg, white 1px, transparent 1px)',
-              backgroundSize: '56px 56px',
-            }}
-          />
+          <div className="absolute -right-40 -top-40 h-[32rem] w-[32rem] rounded-full bg-gold-200/60 blur-3xl" />
+          <div className="absolute -bottom-40 -left-40 h-[32rem] w-[32rem] rounded-full bg-mint-200/70 blur-3xl" />
         </div>
 
         <div className="relative mx-auto grid max-w-7xl items-center gap-14 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:py-28">
           <div>
-            <span className="chip bg-gold-400/15 text-gold-300 ring-1 ring-gold-400/30">
+            <span className="chip bg-gold-100 text-navy-800 ring-1 ring-gold-300">
               🇪🇹 Harar, Harari Region · Launching September 2026
             </span>
             <h1 className="mt-6 text-4xl font-black leading-tight tracking-tight sm:text-5xl lg:text-6xl">
               Focused Preparation.
-              <span className="block bg-gradient-to-r from-gold-300 to-gold-500 bg-clip-text text-transparent">
+              <span className="block bg-gradient-to-r from-gold-500 to-gold-600 bg-clip-text text-transparent">
                 Real Results.
               </span>
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-300">
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-600">
               {school?.about ||
                 'EXAM FOCUS gives Grade 9–12 students affordable, structured, teacher-led online classes and exam preparation — built to work even with limited data and devices.'}
             </p>
@@ -94,40 +86,40 @@ export default function Landing() {
               <Link to="/register" className="btn-primary !px-7 !py-3 text-base">
                 Start Learning Free
               </Link>
-              <Link to="/courses" className="btn !border-2 !border-white/30 !text-white hover:!bg-white/10 !px-7 !py-3 text-base">
+              <Link to="/courses" className="btn-outline !px-7 !py-3 text-base">
                 Browse Courses
               </Link>
             </div>
 
-            <dl className="mt-12 grid max-w-lg grid-cols-3 gap-6 border-t border-white/10 pt-8">
+            <dl className="mt-12 grid max-w-lg grid-cols-3 gap-6 border-t border-mint-200 pt-8">
               {[
                 { label: 'Courses', value: stats.courses },
                 { label: 'Students', value: `${stats.learners}+` },
                 { label: 'Teachers', value: stats.instructors },
               ].map((s) => (
                 <div key={s.label}>
-                  <dt className="text-sm font-medium uppercase tracking-wider text-slate-400">{s.label}</dt>
-                  <dd className="mt-1 text-3xl font-black text-gold-300">{s.value}</dd>
+                  <dt className="text-sm font-medium uppercase tracking-wider text-slate-500">{s.label}</dt>
+                  <dd className="mt-1 text-3xl font-black text-gold-600">{s.value}</dd>
                 </div>
               ))}
             </dl>
           </div>
 
           <div className="relative">
-            <div className="card overflow-hidden !bg-white/5 !shadow-2xl ring-1 ring-white/10 backdrop-blur">
-              <div className="flex items-center gap-2 border-b border-white/10 px-5 py-3">
+            <div className="card shadow-xl ring-1 ring-slate-200">
+              <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3">
                 <span className="h-3 w-3 rounded-full bg-red-400/80" />
-                <span className="h-3 w-3 rounded-full bg-gold-300/80" />
+                <span className="h-3 w-3 rounded-full bg-gold-400/80" />
                 <span className="h-3 w-3 rounded-full bg-emerald-400/80" />
-                <span className="ml-2 text-xs font-semibold text-slate-300">examfocus.edu.et/dashboard</span>
+                <span className="ml-2 text-xs font-semibold text-slate-500">examfocus.edu.et/dashboard</span>
               </div>
               <div className="space-y-4 p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-wider text-slate-400">National Exam Pass Rate</p>
-                    <p className="text-3xl font-black text-white">8.4%</p>
+                    <p className="text-xs uppercase tracking-wider text-slate-500">National Exam Pass Rate</p>
+                    <p className="text-3xl font-black text-navy-900">8.4%</p>
                   </div>
-                  <span className="chip bg-red-500/20 text-red-300">2024/25 Cycle</span>
+                  <span className="chip bg-red-100 text-red-600">2024/25 Cycle</span>
                 </div>
                 <div className="space-y-3">
                   {[
@@ -137,18 +129,18 @@ export default function Landing() {
                     { name: 'Biology', pct: 84 },
                   ].map((row) => (
                     <div key={row.name}>
-                      <div className="mb-1 flex justify-between text-xs font-semibold text-slate-300">
+                      <div className="mb-1 flex justify-between text-xs font-semibold text-slate-600">
                         <span><SubjectDot subject={row.name.split(' ')[0]} />{row.name}</span>
                         <span>{row.pct}%</span>
                       </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                         <div className="h-full rounded-full bg-gradient-to-r from-gold-400 to-gold-300" style={{ width: `${row.pct}%` }} />
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="rounded-xl bg-white/5 p-4 text-xs text-slate-300">
-                  <span className="font-bold text-gold-300">Our goal:</span> make sure our students are always in the
+                <div className="rounded-xl bg-mint-50 p-4 text-xs text-slate-600">
+                  <span className="font-bold text-mint-700">Our goal:</span> make sure our students are always in the
                   passing percentage.
                 </div>
               </div>
@@ -235,19 +227,19 @@ export default function Landing() {
       </section>
 
       {/* HOW IT WORKS */}
-      <section className="relative overflow-hidden bg-navy-900 py-20 text-white">
-        <div className="absolute -right-32 top-0 h-96 w-96 rounded-full bg-gold-500/10 blur-3xl" />
+      <section className="relative overflow-hidden bg-white py-20 text-navy-900">
+        <div className="absolute -right-32 top-0 h-96 w-96 rounded-full bg-gold-200/60 blur-3xl" />
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6">
           <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm font-bold uppercase tracking-widest text-gold-400">How it works</p>
+            <p className="text-sm font-bold uppercase tracking-widest text-gold-600">How it works</p>
             <h2 className="mt-3 text-3xl font-black sm:text-4xl">Start in three simple steps</h2>
           </div>
           <div className="mt-14 grid gap-8 md:grid-cols-3">
             {STEPS.map((s) => (
-              <div key={s.n} className="relative rounded-2xl border border-white/10 bg-white/5 p-8">
-                <span className="text-4xl font-black text-gold-400/40">{s.n}</span>
+              <div key={s.n} className="relative rounded-2xl border border-mint-100 bg-mint-50 p-8">
+                <span className="text-4xl font-black text-gold-500/50">{s.n}</span>
                 <h3 className="mt-4 text-xl font-bold">{s.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-300">{s.text}</p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">{s.text}</p>
               </div>
             ))}
           </div>

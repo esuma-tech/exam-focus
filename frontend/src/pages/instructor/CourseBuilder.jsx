@@ -12,10 +12,9 @@ const blankModule = () => ({ title: '', description: '', lessons: [blankLesson()
 
 export default function CourseBuilder() {
   const { id } = useParams()
-  const isNew = id === 'new' || id === undefined
+  const isNew = id === 'new'
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [courses, setCourses] = useState([])
   const [form, setForm] = useState({
     title: '', subtitle: '', description: '', subject: 'Mathematics', grade: 'Grade 12',
     price_etb: 0, difficulty: 'intermediate', status: 'draft', thumbnail: '', modules: [],
@@ -27,10 +26,7 @@ export default function CourseBuilder() {
 
   useEffect(() => {
     if (isNew) {
-      api('/courses?public=false')
-        .then(setCourses)
-        .catch(() => {})
-        .finally(() => setLoading(false))
+      setLoading(false)
       return
     }
     api(`/courses/${id}`)

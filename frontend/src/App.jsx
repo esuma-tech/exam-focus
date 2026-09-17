@@ -3,6 +3,7 @@ import { useAuth } from './store'
 import Layout from './components/Layout'
 import { FullSpinner } from './components/ui'
 import Landing from './pages/Landing'
+import About from './pages/About'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Courses from './pages/courses/CourseList'
@@ -14,6 +15,7 @@ import MyCourses from './pages/learn/MyCourses'
 import LiveClasses from './pages/learn/LiveClasses'
 import InstructorDashboard from './pages/dashboards/InstructorDashboard'
 import CourseBuilder from './pages/instructor/CourseBuilder'
+import InstructorCourses from './pages/instructor/InstructorCourses'
 import InstructorLive from './pages/instructor/InstructorLive'
 import AdminDashboard from './pages/dashboards/AdminDashboard'
 import AdminUsers from './pages/admin/AdminUsers'
@@ -39,6 +41,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Layout />}>
         <Route index element={<Landing />} />
+        <Route path="about" element={<About />} />
         <Route path="courses" element={<Courses />} />
         <Route path="courses/:id" element={<CourseDetail />} />
         <Route path="login" element={user ? <Navigate to={homeFor(user.role)} replace /> : <Login />} />
@@ -53,7 +56,8 @@ export default function App() {
 
         {/* Instructor */}
         <Route path="instructor" element={<Protected roles={['instructor', 'admin']}><InstructorDashboard /></Protected>} />
-        <Route path="instructor/courses" element={<Protected roles={['instructor', 'admin']}><CourseBuilder /></Protected>} />
+        <Route path="instructor/courses" element={<Protected roles={['instructor', 'admin']}><InstructorCourses /></Protected>} />
+        <Route path="instructor/courses/new" element={<Protected roles={['instructor', 'admin']}><CourseBuilder /></Protected>} />
         <Route path="instructor/courses/:id" element={<Protected roles={['instructor', 'admin']}><CourseBuilder /></Protected>} />
         <Route path="instructor/live" element={<Protected roles={['instructor', 'admin']}><InstructorLive /></Protected>} />
 

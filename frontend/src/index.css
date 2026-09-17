@@ -7,7 +7,7 @@
     scroll-behavior: smooth;
   }
   body {
-    @apply bg-slate-50 text-slate-800 antialiased;
+    @apply bg-mint-50/60 text-slate-800 antialiased;
   }
 }
 
