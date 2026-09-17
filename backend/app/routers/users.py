@@ -1,0 +1,112 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from ..database import get_db
+from ..deps import admin_only, get_current_user
+from ..models import AnalyticsEvent, Notification, User
+from ..schemas import Message, UserOut, UserUpdate
+from ..security import hash_password
+
+router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.get("", response_model=list[UserOut])
+def list_users(
+    role: str | None = None,
+    search: str | None = None,
+    _: User = Depends(admin_only),
+    db: Session = Depends(get_db),
+):
+    q = db.query(User)
+    if role:
+        q = q.filter(User.role == role)
+    if search:
+        like = f"%{search}%"
+        q = q.filter(User.email.like(like) | User.full_name.like(like))
+    return q.order_by(User.created_at.desc()).limit(500).all()
+
+
+@router.get("/instructors", response_model=list[UserOut])
+def list_instructors(db: Session = Depends(get_db)):
+    return db.query(User).filter(User.role == "instructor", User.is_active == True).all()
+
+
+@router.post("/{user_id}/approve", response_model=UserOut)
+def approve_user(user_id: int, db: Session = Depends(get_db), _: User = Depends(admin_only)):
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_approved = True
+    user.is_active = True
+    db.add(AnalyticsEvent(event_name="user.approved", entity="user", entity_id=user.id, user_id=user.id))
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.post("/{user_id}/reject", response_model=Message)
+def reject_user(user_id: int, db: Session = Depends(get_db), _: User = Depends(admin_only)):
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.role == "admin":
+        raise HTTPException(status_code=400, detail="Cannot reject an admin account")
+    db.delete(user)
+    db.commit()
+    return Message(message="Registration rejected and account removed")
+
+
+@router.get("/{user_id}", response_model=UserOut)
+def get_user(user_id: int, db: Session = Depends(get_db), current: User = Depends(get_current_user)):
+    if current.role == "learner" and current.id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@router.patch("/{user_id}", response_model=UserOut)
+def update_user(
+    user_id: int,
+    payload: UserUpdate,
+    db: Session = Depends(get_db),
+    current: User = Depends(get_current_user),
+):
+    if current.role != "admin" and current.id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    password = data.pop("password", None)
+    # Only admins can change roles / disable accounts.
+    if current.role != "admin":
+        data.pop("role", None)
+        data.pop("is_active", None)
+    if "email" in data:
+        new_email = data.pop("email").lower()
+        duplicate = db.query(User).filter(User.email == new_email, User.id != user_id).first()
+        if duplicate:
+            raise HTTPException(status_code=409, detail="An account with this email already exists")
+        user.email = new_email
+    if password:
+        user.password_hash = hash_password(password)
+    for key, value in data.items():
+        setattr(user, key, value)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.delete("/{user_id}", response_model=Message)
+def delete_user(user_id: int, db: Session = Depends(get_db), _: User = Depends(admin_only)):
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.role == "admin":
+        raise HTTPException(status_code=400, detail="Cannot delete an admin account")
+    db.delete(user)
+    db.commit()
+    return Message(message="User deleted")
