@@ -12,7 +12,9 @@ export default function CoursePlayer() {
   const [course, setCourse] = useState(null)
   const [enrollment, setEnrollment] = useState(null)
   const [quizzes, setQuizzes] = useState([])
+  const [live, setLive] = useState([])
   const [lesson, setLesson] = useState(null)
+  const [showDoc, setShowDoc] = useState(false)
   const [tab, setTab] = useState('Lessons')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -29,10 +31,12 @@ export default function CoursePlayer() {
       api(`/courses/${id}`),
       loadEnrollment(),
       api(`/quizzes?course_id=${id}`).catch(() => []),
+      api(`/live?course_id=${id}`).catch(() => []),
     ])
-      .then(([c, , q]) => {
+      .then(([c, , q, lv]) => {
         setCourse(c)
         setQuizzes(q)
+        setLive(lv || [])
         const all = c.modules.flatMap((m) => m.lessons)
         setLesson(all[0] || null)
       })
@@ -90,6 +94,31 @@ export default function CoursePlayer() {
           </div>
           <ProgressBar percent={enrollment.progress_percent} />
         </div>
+      </div>
+
+      <div className="mb-6 grid gap-3">
+        {live.map((cl) => (
+          <div key={cl.id} className="card flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                {cl.status === 'live' ? (
+                  <span className="chip bg-red-100 text-red-700">🔴 Live now</span>
+                ) : (
+                  <span className="chip bg-gold-100 text-yellow-800">🗓 Live class</span>
+                )}
+                <h3 className="font-black text-navy-900">{cl.title}</h3>
+              </div>
+              <p className="mt-1 text-sm text-slate-500">
+                {new Date(cl.scheduled_at).toLocaleString()} · {cl.duration_min} min
+              </p>
+            </div>
+            {cl.status === 'live' ? (
+              <a href={cl.meeting_url} target="_blank" rel="noreferrer" className="btn-primary flex-none">Go live</a>
+            ) : (
+              <span className="btn-outline cursor-not-allowed flex-none opacity-60">Join at start time</span>
+            )}
+          </div>
+        ))}
       </div>
 
       <div className="mb-6 flex gap-2 border-b border-slate-200">
@@ -152,9 +181,22 @@ export default function CoursePlayer() {
                 )}
                 <div className="prose prose-slate mt-6 max-w-none text-slate-600" dangerouslySetInnerHTML={{ __html: lesson.content }} />
                 {lesson.attachment_url && (
-                  <a href={lesson.attachment_url} target="_blank" rel="noreferrer" className="btn-outline mt-6">
-                    📎 Download resource
-                  </a>
+                  <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-sm font-bold text-navy-900">📄 Lesson document</span>
+                      <button className="btn-navy !px-4 !py-1.5 text-xs" onClick={() => setShowDoc((s) => !s)}>
+                        {showDoc ? 'Hide' : 'View on platform'}
+                      </button>
+                      <a href={lesson.attachment_url} download className="btn-outline !px-4 !py-1.5 text-xs">⬇ Download</a>
+                    </div>
+                    {showDoc && (
+                      lesson.attachment_url.toLowerCase().endsWith('.pdf') ? (
+                        <iframe src={lesson.attachment_url} title="Document viewer" className="mt-3 h-[70vh] w-full rounded-xl border border-slate-200 bg-white" />
+                      ) : (
+                        <a href={lesson.attachment_url} target="_blank" rel="noreferrer" className="btn-outline mt-3">Open document in new tab</a>
+                      )
+                    )}
+                  </div>
                 )}
                 <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-6">
                   {completed.has(lesson.id) ? (

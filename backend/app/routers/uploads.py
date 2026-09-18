@@ -1,5 +1,6 @@
-import os
+import mimetypes
 import uuid
+from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -8,6 +9,7 @@ from fastapi.responses import FileResponse
 from ..config import get_settings
 from ..deps import get_current_user
 from ..models import User
+from ..services import storage
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 settings = get_settings()
@@ -38,19 +40,36 @@ def upload_file(file: UploadFile = File(...), _: User = Depends(get_current_user
     if kind is None:
         raise HTTPException(status_code=400, detail="File type not allowed")
 
+    # Read the stream into memory (capped) so we can hand it to S3 or disk.
+    buf = BytesIO()
+    size = 0
+    while chunk := file.file.read(1024 * 1024):
+        size += len(chunk)
+        if size > MAX_SIZE:
+            raise HTTPException(status_code=413, detail="File too large")
+        buf.write(chunk)
+    buf.seek(0)
+
+    if storage.storage_enabled():
+        key = f"media/{uuid.uuid4().hex[:20]}{ext}"
+        content_type = mimetypes.guess_type(file.filename or "")[0] or "application/octet-stream"
+        url = storage.put_object(key, buf, content_type)
+        return {
+            "filename": key,
+            "original_name": file.filename,
+            "kind": kind,
+            "size": size,
+            "url": url,
+            "absolute_url": url,
+        }
+
+    # Local fallback (dev machines / storage not configured).
     filename = f"{uuid.uuid4().hex[:16]}{ext}"
     dest = _upload_dir() / filename
-
-    size = 0
     with dest.open("wb") as out:
-        while chunk := file.file.read(1024 * 1024):
-            size += len(chunk)
-            if size > MAX_SIZE:
-                out.close()
-                dest.unlink(missing_ok=True)
-                raise HTTPException(status_code=413, detail="File too large")
+        buf.seek(0)
+        while chunk := buf.read(1024 * 1024):
             out.write(chunk)
-
     return {
         "filename": filename,
         "original_name": file.filename,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api } from '../../api'
+import { api, uploadFile } from '../../api'
 import { useAuth } from '../../store'
 import { ErrorBox, Loading, SubjectDot } from '../../components/ui'
 import LiveManager from '../../components/LiveManager'
@@ -23,6 +23,9 @@ export default function CourseBuilder() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState('')
+  const [courseData, setCourseData] = useState(null)
+  const [editMod, setEditMod] = useState(null)
+  const [uploading, setUploading] = useState(null)
 
   useEffect(() => {
     if (isNew) {
@@ -98,7 +101,6 @@ export default function CourseBuilder() {
     }
   }
 
-  const [courseData, setCourseData] = useState(null)
   useEffect(() => {
     if (!isNew && id) api(`/courses/${id}`).then(setCourseData).catch(() => {})
   }, [id, isNew, saved])
@@ -106,6 +108,80 @@ export default function CourseBuilder() {
   const publish = async () => {
     await api(`/courses/${id}`, { method: 'PATCH', body: { status: form.status === 'published' ? 'draft' : 'published' } })
     setForm((f) => ({ ...f, status: f.status === 'published' ? 'draft' : 'published' }))
+  }
+
+  const refreshCourse = () => {
+    if (isNew || !id) return
+    api(`/courses/${id}`).then(setCourseData).catch(() => {})
+  }
+
+  const uploadLessonMedia = async (lesson, kind, file) => {
+    if (!file) return
+    setUploading(lesson.id)
+    setError('')
+    setSaved('')
+    try {
+      const res = await uploadFile(file)
+      const field = kind === 'video' ? 'video_url' : 'attachment_url'
+      await api(`/courses/${id}/lessons/${lesson.id}`, { method: 'PATCH', body: { [field]: res.url } })
+      setSaved(kind === 'video' ? 'Video attached to lesson.' : 'Document attached to lesson.')
+      refreshCourse()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setUploading(null)
+    }
+  }
+
+  const clearLessonMedia = async (lesson, field) => {
+    setError('')
+    setSaved('')
+    try {
+      await api(`/courses/${id}/lessons/${lesson.id}`, { method: 'PATCH', body: { [field]: '' } })
+      setSaved('Media removed from lesson.')
+      refreshCourse()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  const deleteLesson = async (lesson) => {
+    if (!confirm(`Delete lesson "${lesson.title}"?`)) return
+    setError('')
+    setSaved('')
+    try {
+      await api(`/courses/${id}/lessons/${lesson.id}`, { method: 'DELETE' })
+      setSaved('Lesson deleted.')
+      refreshCourse()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  const saveModule = async (m) => {
+    setError('')
+    setSaved('')
+    try {
+      await api(`/courses/${id}/modules/${m.id}`, { method: 'PATCH', body: { title: editMod.title, description: editMod.description } })
+      setEditMod(null)
+      setSaved('Module updated.')
+      refreshCourse()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  const deleteModule = async (m) => {
+    if (!confirm(`Delete module "${m.title}" and its ${m.lessons.length} lesson(s)?`)) return
+    setError('')
+    setSaved('')
+    try {
+      await api(`/courses/${id}/modules/${m.id}`, { method: 'DELETE' })
+      setSaved('Module deleted.')
+      refreshCourse()
+    } catch (e) {
+      setError(e.message)
+    }
   }
 
   const removeCourse = async () => {
@@ -192,15 +268,67 @@ export default function CourseBuilder() {
 
             {courseData?.modules?.map((m, mi) => (
               <div key={m.id} className="card mb-4 p-5">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-navy-800 text-xs font-black text-white">{mi + 1}</span>
-                  <h3 className="font-bold text-navy-900">{m.title}</h3>
-                  <span className="chip bg-slate-100 text-slate-500">{m.lessons.length} lessons</span>
-                </div>
+                {editMod?.id === m.id ? (
+                  <div className="space-y-2">
+                    <input
+                      className="input"
+                      value={editMod.title}
+                      onChange={(e) => setEditMod((em) => ({ ...em, title: e.target.value }))}
+                    />
+                    <textarea
+                      className="input"
+                      rows={2}
+                      value={editMod.description}
+                      onChange={(e) => setEditMod((em) => ({ ...em, description: e.target.value }))}
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={() => saveModule(m)} className="btn-navy !px-4 !py-1.5 text-xs">Save module</button>
+                      <button onClick={() => setEditMod(null)} className="btn-ghost !px-4 !py-1.5 text-xs">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-navy-800 text-xs font-black text-white">{mi + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-bold text-navy-900">{m.title}</h3>
+                      {m.description && <p className="text-xs text-slate-500">{m.description}</p>}
+                    </div>
+                    <span className="chip bg-slate-100 text-slate-500">{m.lessons.length} lessons</span>
+                    <button title="Edit module" className="text-slate-400 hover:text-navy-700" onClick={() => setEditMod({ id: m.id, title: m.title, description: m.description })}>✏️</button>
+                    <button title="Delete module" className="text-slate-400 hover:text-red-500" onClick={() => deleteModule(m)}>🗑️</button>
+                  </div>
+                )}
                 <ul className="mt-3 divide-y divide-slate-100">
                   {m.lessons.map((l) => (
-                    <li key={l.id} className="flex items-center gap-3 py-2 text-sm text-slate-600">
-                      <SubjectDot subject={form.subject} />{l.title}
+                    <li key={l.id} className="py-3">
+                      <div className="flex items-center gap-3 text-sm text-slate-600">
+                        <SubjectDot subject={form.subject} />
+                        <span className="min-w-0 flex-1 font-medium text-slate-700">{l.title}</span>
+                        {l.video_url && (
+                          <a href={l.video_url} target="_blank" rel="noreferrer" className="chip bg-navy-100 text-navy-800">▶ Video</a>
+                        )}
+                        {l.attachment_url && (
+                          <a href={l.attachment_url} target="_blank" rel="noreferrer" className="chip bg-gold-100 text-yellow-800">📄 Doc</a>
+                        )}
+                      </div>
+                      <div className="ml-8 mt-2 flex flex-wrap items-center gap-2">
+                        <label className="btn-ghost !px-3 !py-1 text-xs cursor-pointer">
+                          🎬 Upload video
+                          <input type="file" className="hidden" accept="video/*" onChange={(e) => uploadLessonMedia(l, 'video', e.target.files[0])} />
+                        </label>
+                        <label className="btn-ghost !px-3 !py-1 text-xs cursor-pointer">
+                          📄 Upload document
+                          <input type="file" className="hidden" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md" onChange={(e) => uploadLessonMedia(l, 'doc', e.target.files[0])} />
+                        </label>
+                        {uploading === l.id && <span className="text-xs text-slate-400">Uploading…</span>}
+                        {l.video_url && (
+                          <button className="btn-ghost !px-3 !py-1 text-xs text-red-500" onClick={() => clearLessonMedia(l, 'video_url')}>✕ video</button>
+                        )}
+                        {l.attachment_url && (
+                          <button className="btn-ghost !px-3 !py-1 text-xs text-red-500" onClick={() => clearLessonMedia(l, 'attachment_url')}>✕ doc</button>
+                        )}
+                        <button className="btn-ghost !px-3 !py-1 ml-auto text-xs text-red-500" onClick={() => deleteLesson(l)}>Delete lesson</button>
+                      </div>
                     </li>
                   ))}
                 </ul>

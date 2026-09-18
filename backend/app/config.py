@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     PUBLIC_BASE_URL: str = "http://localhost:8000"
     UPLOAD_DIR: str = "uploads"
 
+    # Neon Object Storage (S3-compatible). When AWS_* are blank, uploads fall
+    # back to the local UPLOAD_DIR (files are not persisted across redeploys).
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_ENDPOINT_URL_S3: str = ""
+    AWS_REGION: str = "us-east-2"
+    STORAGE_BUCKET: str = "exam-focus-media"
+
     # SMTP (email notifications). Leave empty to disable email sending.
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

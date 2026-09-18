@@ -149,6 +149,22 @@ class CourseUpdate(BaseModel):
     is_featured: bool | None = None
 
 
+class ModuleUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    position: int | None = None
+
+
+class LessonUpdate(BaseModel):
+    title: str | None = None
+    summary: str | None = None
+    content: str | None = None
+    video_url: str | None = None
+    attachment_url: str | None = None
+    duration_min: int | None = None
+    position: int | None = None
+
+
 # ---------- Enrollment ----------
 class EnrollmentOut(ORMModel):
     id: int

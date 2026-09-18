@@ -51,8 +51,9 @@ export async function api(path, { method = 'GET', body, form, _retry = true } = 
   const headers = {}
   const token = getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
-  else if (form) headers['Content-Type'] = 'multipart/form-data'
+  // For FormData the browser must set Content-Type (with the boundary), so we
+  // never set it manually when a form is present.
+  if (body !== undefined && !form) headers['Content-Type'] = 'application/json'
 
   const res = await fetch(`${BASE}${path}`, {
     method,

@@ -4,10 +4,31 @@ from sqlalchemy.orm import Session, selectinload
 from ..database import get_db
 from ..deps import get_current_user, get_optional_user, instructor_or_admin
 from ..models import AnalyticsEvent, Course, Lesson, Module, User
-from ..schemas import CourseDetail, CourseIn, CourseOut, CourseUpdate, Message, ModuleIn
+from ..schemas import (
+    CourseDetail,
+    CourseIn,
+    CourseOut,
+    CourseUpdate,
+    LessonOut,
+    LessonUpdate,
+    Message,
+    ModuleIn,
+    ModuleOut,
+    ModuleUpdate,
+)
 from ..security import hash_password
+from ..services import storage
 
 router = APIRouter(prefix="/courses", tags=["courses"])
+
+
+def _owned_course(course_id: int, db: Session, current: User) -> Course:
+    course = db.get(Course, course_id)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    if current.role != "admin" and course.instructor_id != current.id:
+        raise HTTPException(status_code=403, detail="You can only edit your own courses")
+    return course
 
 
 def _course_with_children(course: Course) -> CourseDetail:
@@ -170,3 +191,83 @@ def add_module(
         ))
     db.commit()
     return get_course(course_id, db)
+
+
+@router.patch("/{course_id}/modules/{module_id}", response_model=ModuleOut)
+def update_module(
+    course_id: int,
+    module_id: int,
+    payload: ModuleUpdate,
+    db: Session = Depends(get_db),
+    current: User = Depends(instructor_or_admin),
+):
+    _owned_course(course_id, db, current)
+    mod = db.get(Module, module_id)
+    if not mod or mod.course_id != course_id:
+        raise HTTPException(status_code=404, detail="Module not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(mod, key, value)
+    db.commit()
+    db.refresh(mod)
+    return mod
+
+
+@router.delete("/{course_id}/modules/{module_id}", response_model=Message)
+def delete_module(
+    course_id: int,
+    module_id: int,
+    db: Session = Depends(get_db),
+    current: User = Depends(instructor_or_admin),
+):
+    _owned_course(course_id, db, current)
+    mod = db.get(Module, module_id)
+    if not mod or mod.course_id != course_id:
+        raise HTTPException(status_code=404, detail="Module not found")
+    for lesson in mod.lessons:
+        storage.delete_by_url(lesson.video_url)
+        storage.delete_by_url(lesson.attachment_url)
+    db.delete(mod)
+    db.commit()
+    return Message(message="Module deleted")
+
+
+@router.patch("/{course_id}/lessons/{lesson_id}", response_model=LessonOut)
+def update_lesson(
+    course_id: int,
+    lesson_id: int,
+    payload: LessonUpdate,
+    db: Session = Depends(get_db),
+    current: User = Depends(instructor_or_admin),
+):
+    _owned_course(course_id, db, current)
+    lesson = db.get(Lesson, lesson_id)
+    if not lesson or lesson.module.course_id != course_id:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    data = payload.model_dump(exclude_unset=True)
+    if "video_url" in data:
+        storage.delete_by_url(lesson.video_url)
+    if "attachment_url" in data:
+        storage.delete_by_url(lesson.attachment_url)
+    for key, value in data.items():
+        setattr(lesson, key, value)
+    db.commit()
+    db.refresh(lesson)
+    return lesson
+
+
+@router.delete("/{course_id}/lessons/{lesson_id}", response_model=Message)
+def delete_lesson(
+    course_id: int,
+    lesson_id: int,
+    db: Session = Depends(get_db),
+    current: User = Depends(instructor_or_admin),
+):
+    _owned_course(course_id, db, current)
+    lesson = db.get(Lesson, lesson_id)
+    if not lesson or lesson.module.course_id != course_id:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    storage.delete_by_url(lesson.video_url)
+    storage.delete_by_url(lesson.attachment_url)
+    db.delete(lesson)
+    db.commit()
+    return Message(message="Lesson deleted")
