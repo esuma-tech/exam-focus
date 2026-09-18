@@ -198,7 +198,7 @@ export default function Layout() {
           </div>
         </div>
         <div className="border-t border-white/10 py-5 text-center text-xs text-slate-500">
-          © {new Date().getFullYear()} Developed by Esayas and Sir Haile.
+          © {new Date().getFullYear()} Idea owned by Sir Haile · Built & developed by Esayas Belay.
         </div>
       </footer>
     </div>

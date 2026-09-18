@@ -1,4 +1,22 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+
+function Avatar({ src, fallback, className }) {
+  const [failed, setFailed] = useState(false)
+  if (failed || !src) {
+    return (
+      <div className={`flex h-14 w-14 items-center justify-center ${className}`}>{fallback}</div>
+    )
+  }
+  return (
+    <img
+      src={src}
+      alt=""
+      onError={() => setFailed(true)}
+      className="h-28 w-28 rounded-2xl object-cover ring-4 ring-mint-100"
+    />
+  )
+}
 
 const VALUES = [
   {
@@ -53,34 +71,38 @@ export default function About() {
 
           <div className="mt-14 grid gap-8 md:grid-cols-2">
             <div className="card card-hover p-8">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-navy-800 text-2xl">👨‍💻</div>
-              <h3 className="mt-6 text-2xl font-black text-navy-900">Esayas Belay</h3>
-              <p className="mt-1 text-sm font-bold uppercase tracking-wider text-gold-600">Developer & Owner of the Idea</p>
+              <Avatar src="/assets/haile.jpg" className="rounded-2xl bg-gold-400 text-2xl" fallback="👨‍🏫" />
+              <h3 className="mt-6 text-2xl font-black text-navy-900">Mr. Haile</h3>
+              <p className="mt-1 text-sm font-bold uppercase tracking-wider text-gold-600">
+                Owner of the Idea · Director at Hitech Academy
+              </p>
               <p className="mt-4 leading-relaxed text-slate-600">
-                Esayas is the developer and owner of the EXAM FOCUS idea. He designed, built and continues to run the
-                entire platform — the learning app, dashboards, live classes and the technology that keeps everything
-                fast, secure and affordable for students across Ethiopia.
+                Mr. Haile is the owner of the EXAM FOCUS idea and a decorated, experienced teacher. He currently serves
+                as a director at Hitech Academy. He shapes the curriculum, sets the exam-style questions and teaches
+                students directly — bringing years of classroom experience to every lesson.
               </p>
               <ul className="mt-5 space-y-2 text-sm text-slate-600">
-                <li>• Creator and technical lead of EXAM FOCUS</li>
-                <li>• Built the full platform from the ground up</li>
-                <li>• Always improving it with the students' interests first</li>
+                <li>• Owner of the EXAM FOCUS idea and academic lead</li>
+                <li>• Decorated teacher and director at Hitech Academy</li>
+                <li>• Prepares students for their national exams</li>
               </ul>
             </div>
 
             <div className="card card-hover p-8">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gold-400 text-2xl">👨‍🏫</div>
-              <h3 className="mt-6 text-2xl font-black text-navy-900">Mr. Haile</h3>
-              <p className="mt-1 text-sm font-bold uppercase tracking-wider text-gold-600">Decorated Teacher & Academic Lead</p>
+              <Avatar src="/assets/esayas.jpg" className="rounded-2xl bg-navy-800 text-2xl" fallback="👨‍💻" />
+              <h3 className="mt-6 text-2xl font-black text-navy-900">Esayas Belay</h3>
+              <p className="mt-1 text-sm font-bold uppercase tracking-wider text-gold-600">
+                Designer, Coder & Developer · System Administrator
+              </p>
               <p className="mt-4 leading-relaxed text-slate-600">
-                Mr. Haile is a decorated and experienced teacher who leads the academic side of EXAM FOCUS. He shapes
-                the curriculum, sets the exam-style questions and teaches students directly — bringing years of
-                classroom experience to every lesson.
+                Esayas is the designer, coder and developer who built the whole platform, from the learning app and
+                dashboards to the live classes and the technology behind them. He is a system administrator at the
+                Commercial Bank of Ethiopia, and he puts that technical expertise into every feature of EXAM FOCUS.
               </p>
               <ul className="mt-5 space-y-2 text-sm text-slate-600">
-                <li>• Decorated teacher behind the curriculum</li>
-                <li>• Leads live classes and exam preparation</li>
-                <li>• Prepares students for their national exams</li>
+                <li>• Designer, coder and developer of the platform</li>
+                <li>• System Administrator at Commercial Bank of Ethiopia</li>
+                <li>• Keeps everything fast, secure and affordable</li>
               </ul>
             </div>
           </div>
