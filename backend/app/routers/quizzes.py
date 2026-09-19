@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
@@ -13,8 +13,10 @@ from ..schemas import (
     QuizOut,
     QuizSubmitIn,
     Message,
+    QuestionImportOut,
 )
 from ..services.notifications import notify_quiz_result
+from ..services.question_import import extract_text, parse_questions
 
 router = APIRouter(prefix="/quizzes", tags=["quizzes"])
 
@@ -63,6 +65,36 @@ def get_quiz_for_learner(quiz_id: int, db: Session = Depends(get_db), current: U
     data = QuizDetailForLearner.model_validate(quiz)
     data.attempts_taken = attempts_taken
     return data
+
+
+@router.post("/import", response_model=QuestionImportOut)
+def import_questions(
+    file: UploadFile = File(...),
+    _: User = Depends(instructor_or_admin),
+):
+    """Parse a PDF / Word document of questions and answers into the platform format."""
+    name = file.filename or ""
+    data = file.file.read(11 * 1024 * 1024)
+    if len(data) >= 11 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File is too large. Maximum size is 10 MB.")
+    try:
+        text = extract_text(name, data)
+        questions = parse_questions(text)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception:
+        raise HTTPException(
+            status_code=422,
+            detail="Could not read the document. Make sure it is a valid PDF or Word file.",
+        )
+    notes = []
+    if not questions:
+        notes.append("No numbered questions with answer markers were found in the document.")
+    elif any(q.get("correct_answer") in (None, "") for q in questions):
+        notes.append(
+            "Some questions have no detected answer — finish them by setting the correct answer before publishing."
+        )
+    return QuestionImportOut(questions=questions, notes=notes)
 
 
 @router.post("", response_model=QuizOut, status_code=201)

@@ -427,9 +427,11 @@ export default function CourseBuilder() {
 function QuizCreator({ courseId }) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
-  const [questions, setQuestions] = useState([{ prompt: '', options: ['', '', '', ''], correct_answer: '' }])
+  const [questions, setQuestions] = useState([{ prompt: '', options: ['', '', '', ''], correct_answer: '', explanation: '' }])
   const [msg, setMsg] = useState('')
   const [error, setError] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [notes, setNotes] = useState([])
 
   const submit = async () => {
     setError('')
@@ -443,10 +445,37 @@ function QuizCreator({ courseId }) {
       })
       setMsg('Quiz published.')
       setTitle('')
-      setQuestions([{ prompt: '', options: ['', '', '', ''], correct_answer: '' }])
+      setQuestions([{ prompt: '', options: ['', '', '', ''], correct_answer: '', explanation: '' }])
+      setNotes([])
       setOpen(false)
     } catch (e) {
       setError(e.message)
+    }
+  }
+
+  const importDoc = async (file) => {
+    setError('')
+    setNotes([])
+    if (!file) return
+    setImporting(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await api('/quizzes/import', { method: 'POST', form })
+      setQuestions(
+        (res.questions || []).map((q) => ({
+          prompt: q.prompt,
+          options: q.options && q.options.length ? q.options : ['', '', '', ''],
+          correct_answer: q.correct_answer || '',
+          explanation: q.explanation || '',
+        }))
+      )
+      setMsg(`Imported ${res.questions?.length || 0} questions from ${file.name}. Review them, then publish.`)
+      setNotes(res.notes || [])
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -465,8 +494,30 @@ function QuizCreator({ courseId }) {
   return (
     <div className="card mt-10 p-6">
       <h2 className="font-black text-navy-900">Create quiz</h2>
+      <p className="mt-1 text-xs text-slate-500">
+        Build questions by hand below, or import a PDF / Word document of questions and answers and the system converts them.
+      </p>
       <ErrorBox error={error} />
-      <input className="input mt-4" placeholder="Quiz title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      {notes.map((n, i) => (
+        <p key={i} className="mt-3 rounded-lg bg-yellow-50 px-3 py-2 text-xs font-semibold text-yellow-800">⚠️ {n}</p>
+      ))}
+      {msg && <p className="mt-3 text-sm font-semibold text-emerald-600">{msg}</p>}
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <input className="input flex-1" placeholder="Quiz title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label className={`btn-outline cursor-pointer flex-none !whitespace-nowrap ${importing ? 'opacity-60' : ''}`}>
+          {importing ? 'Importing…' : '📄 Import PDF / Word'}
+          <input
+            type="file"
+            className="hidden"
+            accept=".pdf,.doc,.docx,.txt"
+            disabled={importing}
+            onChange={(e) => {
+              importDoc(e.target.files[0])
+              e.target.value = ''
+            }}
+          />
+        </label>
+      </div>
       {questions.map((q, qi) => (
         <div key={qi} className="mt-4 rounded-xl bg-slate-50 p-4">
           <input className="input" placeholder={`Question ${qi + 1}`} value={q.prompt} onChange={(e) => setQuestions((qs) => qs.map((x, i) => (i === qi ? { ...x, prompt: e.target.value } : x)))} />
@@ -481,11 +532,14 @@ function QuizCreator({ courseId }) {
               />
             ))}
           </div>
-          <input className="input mt-2" placeholder="Correct answer (must match an option exactly)" value={q.correct_answer} onChange={(e) => setQuestions((qs) => qs.map((x, i) => (i === qi ? { ...x, correct_answer: e.target.value } : x)))} />
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <input className="input" placeholder="Correct answer (must match an option exactly)" value={q.correct_answer} onChange={(e) => setQuestions((qs) => qs.map((x, i) => (i === qi ? { ...x, correct_answer: e.target.value } : x)))} />
+            <input className="input" placeholder="Explanation (optional)" value={q.explanation} onChange={(e) => setQuestions((qs) => qs.map((x, i) => (i === qi ? { ...x, explanation: e.target.value } : x)))} />
+          </div>
         </div>
       ))}
-      <div className="mt-4 flex gap-2">
-        <button className="btn-ghost" onClick={() => setQuestions((qs) => [...qs, { prompt: '', options: ['', '', '', ''], correct_answer: '' }])}>+ Question</button>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button className="btn-ghost" onClick={() => setQuestions((qs) => [...qs, { prompt: '', options: ['', '', '', ''], correct_answer: '', explanation: '' }])}>+ Question</button>
         <button className="btn-navy ml-auto" onClick={submit}>Publish quiz</button>
         <button className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
       </div>

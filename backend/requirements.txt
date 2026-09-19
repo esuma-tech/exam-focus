@@ -10,3 +10,5 @@ pyjwt==2.10.1
 bcrypt==4.3.0
 python-dotenv==1.1.1
 boto3==1.35.99
+pypdf==6.19.0
+python-docx==1.2.0

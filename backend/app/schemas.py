@@ -212,6 +212,11 @@ class QuestionIn(BaseModel):
     position: int = 0
 
 
+class QuestionImportOut(BaseModel):
+    questions: list[QuestionIn] = []
+    notes: list[str] = []
+
+
 class QuizIn(BaseModel):
     title: str
     description: str = ""
