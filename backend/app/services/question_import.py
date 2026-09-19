@@ -114,6 +114,7 @@ def parse_questions(text: str) -> list[dict]:
         between = lines[idx + 1:nxt]
         has_answer = any(ANSWER.match(x) for x in between)
         has_letter_opt = any(OPT_LETTER.match(x) for x in between)
+        inline_multi = len(OPT_INLINE.findall(lines[idx])) >= 2
         verbose = len(lines[idx]) >= 24
         short_option_like = (
             (not is_label)
@@ -123,8 +124,13 @@ def parse_questions(text: str) -> list[dict]:
             and not (has_answer and not _is_key_or_answer_only(between))
             and not has_letter_opt
             and not verbose
+            and not inline_multi
         )
         if short_option_like:
+            continue
+        # A line that is itself a run of inline options ("1. x 2. y 3. z ...")
+        # belongs to the previous question, never starts a new one.
+        if inline_multi:
             continue
         starts.append((idx, key))
         last_start = idx
