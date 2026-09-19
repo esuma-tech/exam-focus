@@ -30,6 +30,16 @@ def get_db():
         db.close()
 
 
+def _fresh_student_id(taken: set) -> str:
+    """Return a random, unused 6-digit student ID."""
+    import random
+
+    while True:
+        candidate = f"{random.randint(0, 999999):06d}"
+        if candidate not in taken:
+            return candidate
+
+
 def run_migrations() -> None:
     """Idempotent, lightweight schema updates for pre-existing databases.
 
@@ -45,3 +55,39 @@ def run_migrations() -> None:
             cols = {c["name"] for c in inspect(conn).get_columns("live_classes")}
             if "invite_key" not in cols:
                 conn.execute(text("ALTER TABLE live_classes ADD COLUMN invite_key VARCHAR(16) DEFAULT ''"))
+
+        # 6-digit student IDs for learner accounts.
+        if "users" in tables:
+            cols = {c["name"] for c in inspect(conn).get_columns("users")}
+            if "student_id" not in cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN student_id VARCHAR(6)"))
+                conn.execute(
+                    text("CREATE UNIQUE INDEX ix_users_student_id ON users (student_id) WHERE student_id IS NOT NULL")
+                )
+            taken = {row[0] for row in conn.execute(text("SELECT student_id FROM users WHERE student_id IS NOT NULL"))}
+            missing = conn.execute(
+                text("SELECT id FROM users WHERE role = 'learner' AND (student_id IS NULL OR student_id = '')")
+            ).fetchall()
+            for (user_id,) in missing:
+                student_id = _fresh_student_id(taken)
+                taken.add(student_id)
+                conn.execute(
+                    text("UPDATE users SET student_id = :sid WHERE id = :uid"), {"sid": student_id, "uid": user_id}
+                )
+
+        # Parent -> student links (one parent can watch many students).
+        if "parent_students" not in tables:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE parent_students (
+                        id SERIAL PRIMARY KEY,
+                        parent_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        CONSTRAINT uq_parent_student UNIQUE (parent_id, student_id)
+                    )
+                    """
+                )
+            )

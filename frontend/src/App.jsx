@@ -9,6 +9,7 @@ import Register from './pages/Register'
 import Courses from './pages/courses/CourseList'
 import CourseDetail from './pages/courses/CourseDetail'
 import LearnerDashboard from './pages/dashboards/LearnerDashboard'
+import ParentDashboard from './pages/dashboards/ParentDashboard'
 import CoursePlayer from './pages/learn/CoursePlayer'
 import QuizTake from './pages/learn/QuizTake'
 import MyCourses from './pages/learn/MyCourses'
@@ -32,7 +33,7 @@ function Protected({ roles = [], children }) {
 }
 
 function homeFor(role) {
-  return { learner: '/learn', instructor: '/instructor', admin: '/admin', parent: '/learn' }[role]
+  return { learner: '/learn', instructor: '/instructor', admin: '/admin', parent: '/parent' }[role]
 }
 
 export default function App() {
@@ -47,12 +48,15 @@ export default function App() {
         <Route path="login" element={user ? <Navigate to={homeFor(user.role)} replace /> : <Login />} />
         <Route path="register" element={user ? <Navigate to={homeFor(user.role)} replace /> : <Register />} />
 
-        {/* Learner & parent */}
-        <Route path="learn" element={<Protected roles={['learner', 'parent']}><LearnerDashboard /></Protected>} />
-        <Route path="learn/courses" element={<Protected roles={['learner', 'parent']}><MyCourses /></Protected>} />
+        {/* Learner */}
+        <Route path="learn" element={<Protected roles={['learner']}><LearnerDashboard /></Protected>} />
+        <Route path="learn/courses" element={<Protected roles={['learner']}><MyCourses /></Protected>} />
         <Route path="learn/courses/:id" element={<Protected roles={['learner', 'parent']}><CoursePlayer /></Protected>} />
         <Route path="learn/courses/:courseId/quiz/:quizId" element={<Protected roles={['learner', 'parent']}><QuizTake /></Protected>} />
         <Route path="learn/live" element={<Protected roles={['learner', 'parent']}><LiveClasses /></Protected>} />
+
+        {/* Parent */}
+        <Route path="parent" element={<Protected roles={['parent']}><ParentDashboard /></Protected>} />
 
         {/* Instructor */}
         <Route path="instructor" element={<Protected roles={['instructor', 'admin']}><InstructorDashboard /></Protected>} />

@@ -21,6 +21,7 @@ class RegisterRequest(BaseModel):
     phone: str = ""
     role: Literal["learner", "instructor", "parent"] = "learner"
     grade: str = ""
+    student_ids: list[str] = []  # required for parents: 6-digit IDs of their children
 
 
 class TokenResponse(BaseModel):
@@ -46,6 +47,7 @@ class UserOut(ORMModel):
     avatar: str
     bio: str
     grade: str
+    student_id: str | None = None
     created_at: datetime
 
 
@@ -176,6 +178,27 @@ class EnrollmentOut(ORMModel):
 
 class LessonCompleteIn(BaseModel):
     lesson_id: int
+
+
+# ---------- Parent ----------
+class ParentStudentLink(BaseModel):
+    student_ids: list[str]
+
+
+class StudentCourseProgress(ORMModel):
+    course_id: int
+    title: str
+    subject: str
+    grade: str
+    progress_percent: float
+    average_quiz_score: float
+
+
+class ParentStudentOut(ORMModel):
+    student: UserOut
+    avg_progress: float
+    avg_quiz_score: float
+    courses: list[StudentCourseProgress] = []
 
 
 # ---------- Quiz ----------

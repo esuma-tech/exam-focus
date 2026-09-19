@@ -22,6 +22,7 @@ export default function LearnerDashboard() {
   const [live, setLive] = useState([])
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -43,6 +44,19 @@ export default function LearnerDashboard() {
   const avgProgress = summary?.avg_progress ?? 0
   const completed = summary?.completed ?? 0
   const avgScore = summary?.avg_score ?? 0
+  const liveByCourse = {}
+  for (const l of live) {
+    if (l.course_id) (liveByCourse[l.course_id] = liveByCourse[l.course_id] || []).push(l)
+  }
+
+  const copyId = async () => {
+    if (!user.student_id) return
+    try {
+      await navigator.clipboard.writeText(user.student_id)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {}
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
@@ -55,6 +69,21 @@ export default function LearnerDashboard() {
         </div>
         <Link to="/courses" className="btn-primary">Browse courses</Link>
       </div>
+
+      {user.student_id && (
+        <button onClick={copyId} className="mb-6 w-full text-left" title="Click to copy">
+          <div className="card flex flex-wrap items-center justify-between gap-4 p-5">
+            <div className="flex items-center gap-3">
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-navy-900 text-xl">🎓</span>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Your student ID</p>
+                <p className="text-2xl font-black tracking-[0.4em] text-navy-900">{user.student_id}</p>
+              </div>
+            </div>
+            <span className="chip bg-mint-100 text-navy-800">{copied ? '✓ Copied!' : '📋 Give this ID to your parent'}</span>
+          </div>
+        </button>
+      )}
 
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Enrolled courses" value={enrollments.length} icon="📚" />
@@ -76,7 +105,11 @@ export default function LearnerDashboard() {
             </div>
           ) : (
             <div className="space-y-4">
-              {enrollments.slice(0, 4).map((e) => (
+              {enrollments.slice(0, 4).map((e) => {
+                const lives = liveByCourse[e.course.id] || []
+                const liveNow = lives.find((l) => l.status === 'live')
+                const hasUpcoming = lives.some((l) => l.status === 'live' || l.status === 'scheduled')
+                return (
                 <div key={e.id} className="card card-hover flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                   <div className="flex h-14 w-14 flex-none items-center justify-center rounded-xl bg-navy-800 text-lg font-black text-gold-300">
                     {e.course.title.charAt(0)}
@@ -90,10 +123,19 @@ export default function LearnerDashboard() {
                       <ProgressBar percent={e.progress_percent} />
                       <span className="w-10 text-right text-xs font-bold text-slate-600">{Math.round(e.progress_percent)}%</span>
                     </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Link to={`/learn/courses/${e.course.id}?view=video`} className="btn-navy !py-1.5 text-xs">🎬 Video class</Link>
+                      <Link to={`/learn/courses/${e.course.id}?view=read`} className="btn-outline !py-1.5 text-xs">📖 Read lesson</Link>
+                      {liveNow ? (
+                        <a href={liveNow.meeting_url} target="_blank" rel="noreferrer" className="btn-primary !py-1.5 text-xs">🔴 Live now</a>
+                      ) : hasUpcoming ? (
+                        <Link to={`/learn/courses/${e.course.id}`} className="btn-outline !py-1.5 text-xs">🗓 Live class</Link>
+                      ) : null}
+                    </div>
                   </div>
-                  <Link to={`/learn/courses/${e.course.id}`} className="btn-navy flex-none !py-2">Continue</Link>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

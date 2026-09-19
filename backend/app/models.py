@@ -10,6 +10,7 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -38,12 +39,19 @@ class User(Base, TimestampMixin):
     avatar: Mapped[str] = mapped_column(String(512), default="", nullable=False)
     bio: Mapped[str] = mapped_column(Text, default="", nullable=False)
     grade: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    student_id: Mapped[str | None] = mapped_column(String(6), unique=True, index=True, nullable=True)
 
     courses_taught = relationship("Course", back_populates="instructor")
     enrollments = relationship("Enrollment", back_populates="user", cascade="all, delete-orphan")
     quiz_attempts = relationship("QuizAttempt", back_populates="user", cascade="all, delete-orphan")
     forum_posts = relationship("ForumPost", back_populates="author")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+    parent_links = relationship(
+        "ParentStudent", foreign_keys="ParentStudent.parent_id", back_populates="parent", cascade="all, delete-orphan"
+    )
+    student_links = relationship(
+        "ParentStudent", foreign_keys="ParentStudent.student_id", back_populates="student", cascade="all, delete-orphan"
+    )
 
 
 class Course(Base, TimestampMixin):
@@ -240,6 +248,18 @@ class LiveClass(Base, TimestampMixin):
 
     instructor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     instructor = relationship("User")
+
+
+class ParentStudent(Base, TimestampMixin):
+    __tablename__ = "parent_students"
+    __table_args__ = (UniqueConstraint("parent_id", "student_id", name="uq_parent_student"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    parent_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+    parent = relationship("User", foreign_keys=[parent_id], back_populates="parent_links")
+    student = relationship("User", foreign_keys=[student_id], back_populates="student_links")
 
 
 class AnalyticsEvent(Base):

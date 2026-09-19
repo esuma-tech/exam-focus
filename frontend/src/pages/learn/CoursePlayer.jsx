@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../../api'
 import Forum from '../../components/Forum'
+import Reader from '../../components/Reader'
 import { Loading, ProgressBar } from '../../components/ui'
 
 const TABS = ['Lessons', 'Quizzes', 'Discussion']
@@ -9,11 +10,14 @@ const TABS = ['Lessons', 'Quizzes', 'Discussion']
 export default function CoursePlayer() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const view = params.get('view') || ''
   const [course, setCourse] = useState(null)
   const [enrollment, setEnrollment] = useState(null)
   const [quizzes, setQuizzes] = useState([])
   const [live, setLive] = useState([])
   const [lesson, setLesson] = useState(null)
+  const [readMode, setReadMode] = useState(view === 'read')
   const [showDoc, setShowDoc] = useState(false)
   const [tab, setTab] = useState('Lessons')
   const [loading, setLoading] = useState(true)
@@ -38,11 +42,15 @@ export default function CoursePlayer() {
         setQuizzes(q)
         setLive(lv || [])
         const all = c.modules.flatMap((m) => m.lessons)
-        setLesson(all[0] || null)
+        let initial = all[0] || null
+        if (view === 'video') initial = all.find((l) => l.video_url) || initial
+        else if (view === 'read') initial = all.find((l) => l.attachment_url || l.content) || initial
+        setLesson(initial)
+        setReadMode(view === 'read')
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [id])
+  }, [id, view])
 
   const allLessons = useMemo(() => course?.modules.flatMap((m) => m.lessons) || [], [course])
   const completed = new Set(enrollment?.completed_lesson_ids || [])
@@ -172,7 +180,28 @@ export default function CoursePlayer() {
           </aside>
 
           <div className="lg:col-span-2">
+            <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-white p-1 ring-1 ring-slate-200 sm:w-80">
+              <button
+                onClick={() => setReadMode(false)}
+                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition ${
+                  !readMode ? 'bg-navy-800 text-white' : 'text-slate-500 hover:text-navy-900'
+                }`}
+              >
+                🎬 Video class
+              </button>
+              <button
+                onClick={() => setReadMode(true)}
+                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition ${
+                  readMode ? 'bg-navy-800 text-white' : 'text-slate-500 hover:text-navy-900'
+                }`}
+              >
+                📖 Read lesson
+              </button>
+            </div>
             {lesson ? (
+              readMode ? (
+                <Reader lesson={lesson} completed={completed} onComplete={markComplete} onNext={gotoNext} />
+              ) : (
               <article className="card p-8">
                 <h2 className="text-2xl font-black text-navy-900">{lesson.title}</h2>
                 <p className="mt-1 text-sm font-medium text-slate-500">{lesson.duration_min ? `${lesson.duration_min} min` : ''}</p>
@@ -207,6 +236,7 @@ export default function CoursePlayer() {
                   <button className="btn-primary" onClick={gotoNext}>Next lesson →</button>
                 </div>
               </article>
+              )
             ) : (
               <p className="text-slate-500">No lessons in this course yet.</p>
             )}

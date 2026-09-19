@@ -12,16 +12,35 @@ const ROLES = [
 export default function Register() {
   const { register } = useAuth()
   const [form, setForm] = useState({ full_name: '', email: '', phone: '', password: '', grade: '', role: 'learner' })
+  const [studentIds, setStudentIds] = useState([''])
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
+  const pickRole = (role) => {
+    setForm((f) => ({ ...f, role }))
+    if (role === 'parent' && studentIds.length === 0) setStudentIds([''])
+  }
+
   const submit = async (e) => {
     e.preventDefault()
     setError('')
     setMessage('')
+    if (form.role === 'parent') {
+      const clean = studentIds.map((s) => s.trim()).filter(Boolean)
+      if (clean.length === 0) {
+        setError('Enter your child\'s 6-digit student ID. Ask them to open their dashboard to find it.')
+        return
+      }
+      const bad = clean.filter((s) => !/^\d{6}$/.test(s))
+      if (bad.length > 0) {
+        setError(`"${bad.join('", "')}" is not a valid 6-digit student ID.`)
+        return
+      }
+      form.student_ids = clean
+    }
     setBusy(true)
     try {
       const data = await register(form)
@@ -61,7 +80,7 @@ export default function Register() {
                 <button
                   type="button"
                   key={r.value}
-                  onClick={() => setForm((f) => ({ ...f, role: r.value }))}
+                  onClick={() => pickRole(r.value)}
                   className={`rounded-xl border-2 p-3 text-left transition ${
                     form.role === r.value ? 'border-gold-400 bg-gold-50' : 'border-slate-200 hover:border-navy-300'
                   }`}
@@ -105,6 +124,50 @@ export default function Register() {
               </select>
             </div>
           </div>
+
+          {form.role === 'parent' && (
+            <div>
+              <label className="label">Your child's student ID (required)</label>
+              <p className="mb-2 text-xs text-slate-500">
+                Each student is given a unique 6-digit ID. Ask your child to open their dashboard and you'll find it there.
+              </p>
+              <div className="space-y-2">
+                {studentIds.map((sid, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      className="input flex-1 !text-lg tracking-[0.35em]"
+                      placeholder="123456"
+                      maxLength={6}
+                      value={sid}
+                      onChange={(e) => setStudentIds((arr) => arr.map((v, j) => (j === i ? e.target.value : v)))}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setStudentIds((arr) => arr.filter((_, j) => j !== i))}
+                      className="h-11 w-11 flex-none rounded-xl border border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      title="Remove"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setStudentIds((arr) => [...arr, ''])}
+                className="mt-2 text-sm font-bold text-navy-700 hover:underline"
+              >
+                + Add another student
+              </button>
+            </div>
+          )}
+
+          {form.role === 'learner' && (
+            <div className="rounded-xl border border-mint-200 bg-mint-50 p-4 text-sm text-navy-800">
+              🎓 A unique <strong>6-digit student ID</strong> is assigned to you when your account is created. You'll see it on
+              your dashboard — share it with your parent so they can follow your progress.
+            </div>
+          )}
 
           <button className="btn-primary w-full !py-3" disabled={busy}>
             {busy ? 'Submitting…' : 'Submit for approval'}

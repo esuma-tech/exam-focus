@@ -37,7 +37,7 @@ def my_enrollments(db: Session = Depends(get_db), current: User = Depends(get_cu
 
 @router.post("/{course_id}", response_model=EnrollmentOut, status_code=status.HTTP_201_CREATED)
 def enroll(course_id: int, db: Session = Depends(get_db), current: User = Depends(get_current_user)):
-    if current.role not in ("learner", "parent"):
+    if current.role != "learner":
         raise HTTPException(status_code=403, detail="Only learners can enroll")
     course = db.get(Course, course_id)
     if not course or course.status != "published":

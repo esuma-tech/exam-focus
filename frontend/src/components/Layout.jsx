@@ -4,7 +4,7 @@ import { useAuth } from '../store'
 import { api } from '../api'
 
 function homeFor(role) {
-  return { learner: '/learn', instructor: '/instructor', admin: '/admin', parent: '/learn' }[role] || '/'
+  return { learner: '/learn', instructor: '/instructor', admin: '/admin', parent: '/parent' }[role] || '/'
 }
 
 function NavLinks({ user, onNavigate }) {
@@ -24,11 +24,15 @@ function NavLinks({ user, onNavigate }) {
   const home = homeFor(user?.role)
   return (
     <>
-      {user?.role === 'learner' || user?.role === 'parent' ? (
+      {user?.role === 'learner' ? (
         <>
           {link('/learn', 'Dashboard')}
           {link('/learn/courses', 'My Courses')}
           {link('/learn/live', 'Live Classes')}
+        </>
+      ) : user?.role === 'parent' ? (
+        <>
+          {link('/parent', 'My Students')}
         </>
       ) : user?.role === 'instructor' ? (
         <>

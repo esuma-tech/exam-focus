@@ -15,6 +15,7 @@ from .routers import (
     forum,
     live,
     notifications,
+    parents,
     quizzes,
     system,
     uploads,
@@ -42,7 +43,8 @@ Base.metadata.create_all(bind=engine)
 run_migrations()
 
 for r in (auth.router, users.router, courses.router, enrollments.router, quizzes.router,
-          forum.router, notifications.router, live.router, analytics.router, uploads.router, system.router):
+          forum.router, notifications.router, live.router, analytics.router, uploads.router,
+          parents.router, system.router):
     app.include_router(r, prefix=settings.API_PREFIX)
 
 
