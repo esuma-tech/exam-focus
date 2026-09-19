@@ -13,6 +13,8 @@ export default function QuizTake() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState(null)
+  const [locked, setLocked] = useState(false)
+  const [pastAttempts, setPastAttempts] = useState([])
 
   useEffect(() => {
     api(`/quizzes/${quizId}/take`)
@@ -20,7 +22,19 @@ export default function QuizTake() {
         setQuiz(q)
         setSecondsLeft(q.time_limit_min * 60)
       })
-      .catch((e) => setError(e.message))
+      .catch((e) => {
+        const limited = /attempt limit|limit reached/i.test(e.message)
+        if (limited) {
+          setLocked(true)
+          setError('You have used all of your allowed attempts for this quiz.')
+          api(`/quizzes/${quizId}/attempts/my`)
+            .then((rows) => setPastAttempts(rows || []))
+            .catch(() => {})
+            .finally(() => setLoading(false))
+          return
+        }
+        setError(e.message)
+      })
       .finally(() => setLoading(false))
   }, [quizId])
 
@@ -60,6 +74,30 @@ export default function QuizTake() {
 
   if (loading) return <Loading />
   if (error && !quiz) {
+    if (locked) {
+      const best = pastAttempts.reduce((m, a) => (a.percent > m ? a.percent : m), 0)
+      const last = pastAttempts[0] || null
+      return (
+        <div className="mx-auto max-w-xl px-4 py-20">
+          <div className="card p-8 text-center">
+            <p className="text-5xl">🔒</p>
+            <h1 className="mt-3 text-2xl font-black text-navy-900">Attempt limit reached</h1>
+            <p className="mt-2 text-slate-500">You have used every attempt allowed for this quiz.</p>
+            {last && (
+              <div className="mt-6 rounded-2xl bg-navy-900 px-6 py-5 text-white">
+                <p className="text-4xl font-black">{Math.round(best)}%</p>
+                <p className="mt-1 text-sm font-bold">Best score from {pastAttempts.length} attempt(s)</p>
+                <p className="mt-1 text-xs opacity-70">{last.passed ? 'Quiz passed 🎉' : 'Not passed yet'}</p>
+              </div>
+            )}
+            <div className="mt-6 flex justify-center gap-3">
+              <Link to={`/learn/courses/${courseId}`} className="btn-outline">← Back to course</Link>
+              <Link to="/learn/quizzes" className="btn-navy">My quizzes</Link>
+            </div>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="mx-auto max-w-xl px-4 py-20">
         <ErrorBox error={error} />
@@ -70,6 +108,7 @@ export default function QuizTake() {
 
   if (result) {
     const graded = result.answers || []
+    const canRetake = (quiz.attempts_taken + 1) < quiz.attempt_limit
     return (
       <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
         <div className={`card overflow-hidden ${result.passed ? '' : ''}`}>
@@ -101,11 +140,15 @@ export default function QuizTake() {
           ))}
         </div>
 
-        <div className="mt-8 flex flex-wrap gap-3">
+        <div className="mt-8 flex flex-wrap items-center gap-3">
           <Link to={`/learn/courses/${courseId}`} className="btn-navy">Back to course</Link>
-          <button className="btn-outline" onClick={() => { setResult(null); setAnswers({}); setSecondsLeft(quiz.time_limit_min * 60) }}>
-            Retake
-          </button>
+          {canRetake ? (
+            <button className="btn-outline" onClick={() => { setResult(null); setAnswers({}); setSecondsLeft(quiz.time_limit_min * 60) }}>
+              Retake ({quiz.attempt_limit - quiz.attempts_taken - 1} left)
+            </button>
+          ) : (
+            <span className="chip bg-slate-100 text-slate-500">🔒 All attempts used</span>
+          )}
         </div>
       </div>
     )

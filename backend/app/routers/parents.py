@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..deps import require_roles
-from ..models import AnalyticsEvent, Enrollment, Lesson, Module, ParentStudent, Quiz, QuizAttempt, User
-from ..schemas import Message, ParentStudentLink, ParentStudentOut, StudentCourseProgress
+from ..models import AnalyticsEvent, Course, Enrollment, Lesson, Module, ParentStudent, Quiz, QuizAttempt, User
+from ..schemas import Message, ParentQuizOut, ParentStudentLink, ParentStudentOut, QuizResultItem, StudentCourseProgress
 
 router = APIRouter(prefix="/parents", tags=["parents"])
 
@@ -129,3 +129,44 @@ def remove_student(student_id: int, db: Session = Depends(get_db), current: User
     db.delete(link)
     db.commit()
     return Message(message="Student removed from your account")
+
+
+@router.get("/quizzes", response_model=list[ParentQuizOut])
+def child_quiz_results(db: Session = Depends(get_db), current: User = Depends(parent_only)):
+    """Quiz results for every student linked to this parent."""
+    links = (
+        db.query(ParentStudent)
+        .options(selectinload(ParentStudent.student))
+        .filter(ParentStudent.parent_id == current.id)
+        .order_by(ParentStudent.created_at.asc())
+        .all()
+    )
+    out: list[ParentQuizOut] = []
+    for link in links:
+        attempts = (
+            db.query(QuizAttempt)
+            .filter(QuizAttempt.user_id == link.student_id)
+            .order_by(QuizAttempt.created_at.desc())
+            .limit(100)
+            .all()
+        )
+        items = []
+        for a in attempts:
+            quiz = db.get(Quiz, a.quiz_id)
+            course = db.get(Course, quiz.course_id) if quiz else None
+            items.append(
+                QuizResultItem(
+                    attempt_id=a.id,
+                    quiz_id=a.quiz_id,
+                    quiz_title=quiz.title if quiz else "Deleted quiz",
+                    course_id=quiz.course_id if quiz else 0,
+                    course_title=course.title if course else "",
+                    score=a.score,
+                    max_score=a.max_score,
+                    percent=a.percent,
+                    passed=a.passed,
+                    created_at=a.created_at,
+                )
+            )
+        out.append(ParentQuizOut(student=link.student, attempts=items))
+    return out

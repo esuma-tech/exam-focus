@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../../api'
+import { api, downloadPdf } from '../../api'
 import { useAuth } from '../../store'
 import { Loading, ProgressBar, SubjectDot } from '../../components/ui'
 
@@ -58,6 +58,12 @@ export default function LearnerDashboard() {
     } catch {}
   }
 
+  const downloadDoc = async (kind) => {
+    try {
+      await downloadPdf(`/students/${user.id}/${kind}`, `${kind}.pdf`)
+    } catch {}
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
@@ -84,6 +90,12 @@ export default function LearnerDashboard() {
           </div>
         </button>
       )}
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Link to="/learn/quizzes" className="btn-navy !py-2 text-sm">📝 My quizzes</Link>
+        <button onClick={() => downloadDoc('id_card')} className="btn-outline !py-2 text-sm">🎫 My ID card</button>
+        <button onClick={() => downloadDoc('certificate')} className="btn-outline !py-2 text-sm">📜 My certificate</button>
+      </div>
 
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Enrolled courses" value={enrollments.length} icon="📚" />

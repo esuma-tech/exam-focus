@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api } from '../../api'
+import { Link } from 'react-router-dom'
+import { api, downloadPdf } from '../../api'
 import { useAuth } from '../../store'
 import { ErrorBox, EmptyState, Loading, ProgressBar, SubjectDot } from '../../components/ui'
 
@@ -10,6 +11,18 @@ export default function ParentDashboard() {
   const [sid, setSid] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [downloadBusy, setDownloadBusy] = useState('')
+
+  const downloadDoc = async (student, kind) => {
+    setDownloadBusy(kind)
+    try {
+      await downloadPdf(`/students/${student.id}/${kind}`, `${kind}-${student.id}.pdf`)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDownloadBusy('')
+    }
+  }
 
   const load = () =>
     api('/parents/students')
@@ -132,6 +145,16 @@ export default function ParentDashboard() {
                     Remove
                   </button>
                 </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Link to="/parent/quizzes" className="btn-navy !px-3 !py-2 text-xs">📝 Quizzes & progress</Link>
+                <button onClick={() => downloadDoc(s.student, 'certificate')} className="btn-outline !px-3 !py-2 text-xs" disabled={!!downloadBusy}>
+                  📜 Certificate
+                </button>
+                <button onClick={() => downloadDoc(s.student, 'id_card')} className="btn-outline !px-3 !py-2 text-xs" disabled={!!downloadBusy}>
+                  🎫 ID card
+                </button>
               </div>
 
               <div className="mt-5 space-y-3 border-t border-slate-100 pt-5">

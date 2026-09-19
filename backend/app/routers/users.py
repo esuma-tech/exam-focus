@@ -1,11 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException
+import mimetypes
+import uuid
+from io import BytesIO
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from ..config import get_settings
 from ..database import get_db
 from ..deps import admin_only, get_current_user
 from ..models import AnalyticsEvent, Notification, User
 from ..schemas import Message, UserOut, UserUpdate
 from ..security import hash_password
+from ..services import storage
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -29,6 +36,49 @@ def list_users(
 @router.get("/instructors", response_model=list[UserOut])
 def list_instructors(db: Session = Depends(get_db)):
     return db.query(User).filter(User.role == "instructor", User.is_active == True).all()
+
+
+_AVATAR_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+_MAX_AVATAR = 8 * 1024 * 1024
+
+
+@router.post("/me/avatar")
+def upload_avatar(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current: User = Depends(get_current_user),
+):
+    """Upload a profile photo (used on the student ID card)."""
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in _AVATAR_EXTS:
+        raise HTTPException(status_code=400, detail="Image type not allowed")
+    buf = BytesIO()
+    size = 0
+    while chunk := file.file.read(1024 * 1024):
+        size += len(chunk)
+        if size > _MAX_AVATAR:
+            raise HTTPException(status_code=413, detail="Image too large (max 8 MB)")
+        buf.write(chunk)
+    buf.seek(0)
+
+    settings = get_settings()
+    if storage.storage_enabled():
+        key = f"avatars/{uuid.uuid4().hex[:20]}{ext}"
+        content_type = mimetypes.guess_type(file.filename or "")[0] or "application/octet-stream"
+        url = storage.put_object(key, buf, content_type)
+    else:
+        upload_dir = Path(settings.UPLOAD_DIR).resolve()
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"{uuid.uuid4().hex[:16]}{ext}"
+        with (upload_dir / filename).open("wb") as out:
+            buf.seek(0)
+            out.write(buf.read())
+        url = f"{settings.API_PREFIX}/uploads/{filename}"
+
+    current.avatar = url
+    db.commit()
+    db.refresh(current)
+    return {"avatar": url}
 
 
 @router.post("/{user_id}/approve", response_model=UserOut)

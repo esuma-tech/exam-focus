@@ -28,16 +28,19 @@ function NavLinks({ user, onNavigate }) {
         <>
           {link('/learn', 'Dashboard')}
           {link('/learn/courses', 'My Courses')}
+          {link('/learn/quizzes', 'Quizzes')}
           {link('/learn/live', 'Live Classes')}
         </>
       ) : user?.role === 'parent' ? (
         <>
           {link('/parent', 'My Students')}
+          {link('/parent/quizzes', 'Quizzes')}
         </>
       ) : user?.role === 'instructor' ? (
         <>
           {link('/instructor', 'Overview')}
           {link('/instructor/courses', 'My Courses')}
+          {link('/instructor/quizzes', 'Quizzes')}
           {link('/instructor/live', 'Live Classes')}
           {link('/instructor/courses/new', 'Build Course')}
         </>
@@ -45,7 +48,9 @@ function NavLinks({ user, onNavigate }) {
         <>
           {link('/admin', 'Analytics')}
           {link('/admin/users', 'Users')}
+          {link('/admin/students', 'Students')}
           {link('/instructor/courses', 'All Courses')}
+          {link('/instructor/quizzes', 'Quizzes')}
         </>
       ) : null}
     </>

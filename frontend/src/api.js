@@ -96,6 +96,35 @@ export function uploadFile(file) {
   return api('/uploads', { method: 'POST', form })
 }
 
+// Download a PDF (or any blob) with the auth header attached — window.open
+// cannot send the JWT, so we fetch, blob the response and click a temp link.
+export async function downloadPdf(path, fallbackName = 'download.pdf') {
+  const token = getToken()
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    let detail = 'Download failed'
+    try {
+      detail = (await res.json()).detail || detail
+    } catch {}
+    throw new Error(detail)
+  }
+  const blob = await res.blob()
+  const disposition = res.headers.get('Content-Disposition') || ''
+  let name = fallbackName
+  const m = disposition.match(/filename="?([^";]+)"?/i)
+  if (m) name = m[1]
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
 export const roles = {
   admin: { label: 'Administrator', color: 'bg-red-100 text-red-700' },
   instructor: { label: 'Instructor', color: 'bg-navy-100 text-navy-800' },

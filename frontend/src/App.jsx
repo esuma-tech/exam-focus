@@ -13,6 +13,10 @@ import ParentDashboard from './pages/dashboards/ParentDashboard'
 import CoursePlayer from './pages/learn/CoursePlayer'
 import QuizTake from './pages/learn/QuizTake'
 import MyCourses from './pages/learn/MyCourses'
+import LearnerQuizzes from './pages/learn/Quizzes'
+import ParentQuizzes from './pages/parent/Quizzes'
+import InstructorQuizzes from './pages/instructor/Quizzes'
+import AdminStudents from './pages/admin/Students'
 import LiveClasses from './pages/learn/LiveClasses'
 import InstructorDashboard from './pages/dashboards/InstructorDashboard'
 import CourseBuilder from './pages/instructor/CourseBuilder'
@@ -53,21 +57,25 @@ export default function App() {
         <Route path="learn/courses" element={<Protected roles={['learner']}><MyCourses /></Protected>} />
         <Route path="learn/courses/:id" element={<Protected roles={['learner', 'parent']}><CoursePlayer /></Protected>} />
         <Route path="learn/courses/:courseId/quiz/:quizId" element={<Protected roles={['learner', 'parent']}><QuizTake /></Protected>} />
+        <Route path="learn/quizzes" element={<Protected roles={['learner']}><LearnerQuizzes /></Protected>} />
         <Route path="learn/live" element={<Protected roles={['learner', 'parent']}><LiveClasses /></Protected>} />
 
         {/* Parent */}
         <Route path="parent" element={<Protected roles={['parent']}><ParentDashboard /></Protected>} />
+        <Route path="parent/quizzes" element={<Protected roles={['parent']}><ParentQuizzes /></Protected>} />
 
         {/* Instructor */}
         <Route path="instructor" element={<Protected roles={['instructor', 'admin']}><InstructorDashboard /></Protected>} />
         <Route path="instructor/courses" element={<Protected roles={['instructor', 'admin']}><InstructorCourses /></Protected>} />
         <Route path="instructor/courses/new" element={<Protected roles={['instructor', 'admin']}><CourseBuilder /></Protected>} />
         <Route path="instructor/courses/:id" element={<Protected roles={['instructor', 'admin']}><CourseBuilder /></Protected>} />
+        <Route path="instructor/quizzes" element={<Protected roles={['instructor', 'admin']}><InstructorQuizzes /></Protected>} />
         <Route path="instructor/live" element={<Protected roles={['instructor', 'admin']}><InstructorLive /></Protected>} />
 
         {/* Admin */}
         <Route path="admin" element={<Protected roles={['admin']}><AdminDashboard /></Protected>} />
         <Route path="admin/users" element={<Protected roles={['admin']}><AdminUsers /></Protected>} />
+        <Route path="admin/students" element={<Protected roles={['admin']}><AdminStudents /></Protected>} />
 
         <Route path="notifications" element={<Protected><Notifications /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />

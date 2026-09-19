@@ -285,6 +285,78 @@ class QuizAttemptOut(ORMModel):
     created_at: datetime
 
 
+class QuizAttemptFullOut(QuizAttemptOut):
+    student: "UserOut"
+
+
+class QuizManageOut(QuizDetail):
+    course_title: str = ""
+    attempts_count: int = 0
+
+
+class LearnerQuizOut(BaseModel):
+    id: int
+    title: str
+    description: str
+    time_limit_min: int
+    pass_percent: float
+    attempt_limit: int
+    course_id: int
+    course_title: str
+    attempts_taken: int = 0
+    best_percent: float = 0.0
+    passed: bool = False
+    can_take: bool = True
+
+
+class QuizResultItem(ORMModel):
+    attempt_id: int
+    quiz_id: int
+    quiz_title: str
+    course_id: int
+    course_title: str
+    score: float
+    max_score: float
+    percent: float
+    passed: bool
+    created_at: datetime
+
+
+# ---------- Students & certificates ----------
+class CertificateOut(ORMModel):
+    id: int
+    kind: str
+    course_title: str
+    issued_by: int
+    created_at: datetime
+
+
+class CertificateIssueIn(BaseModel):
+    course_title: str = ""
+
+
+class StudentListItem(ORMModel):
+    id: int
+    full_name: str
+    email: EmailStr
+    grade: str
+    student_id: str | None
+    avatar: str
+    enrollments: int = 0
+    avg_quiz_score: float = 0.0
+
+
+class StudentDetailOut(StudentListItem):
+    courses: list[StudentCourseProgress] = []
+    quiz_results: list[QuizResultItem] = []
+    certificates: list[CertificateOut] = []
+
+
+class ParentQuizOut(BaseModel):
+    student: UserOut
+    attempts: list[QuizResultItem] = []
+
+
 # ---------- Forum ----------
 class ForumOut(ORMModel):
     id: int
@@ -463,3 +535,4 @@ class HealthOut(BaseModel):
 
 TokenResponse.model_rebuild()
 ModuleIn.model_rebuild()
+QuizAttemptFullOut.model_rebuild()

@@ -52,6 +52,9 @@ class User(Base, TimestampMixin):
     student_links = relationship(
         "ParentStudent", foreign_keys="ParentStudent.student_id", back_populates="student", cascade="all, delete-orphan"
     )
+    certificates = relationship(
+        "Certificate", foreign_keys="Certificate.student_id", back_populates="student", cascade="all, delete-orphan"
+    )
 
 
 class Course(Base, TimestampMixin):
@@ -260,6 +263,19 @@ class ParentStudent(Base, TimestampMixin):
 
     parent = relationship("User", foreign_keys=[parent_id], back_populates="parent_links")
     student = relationship("User", foreign_keys=[student_id], back_populates="student_links")
+
+
+class Certificate(Base, TimestampMixin):
+    __tablename__ = "certificates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # certificate | id_card
+    course_title: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    student = relationship("User", foreign_keys=[student_id], back_populates="certificates")
+    issued_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    issuer = relationship("User", foreign_keys=[issued_by])
 
 
 class AnalyticsEvent(Base):

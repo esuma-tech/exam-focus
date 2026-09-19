@@ -1,15 +1,19 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..deps import get_current_user, instructor_or_admin
-from ..models import AnalyticsEvent, Course, Question, Quiz, QuizAttempt, User
+from ..models import AnalyticsEvent, Course, Enrollment, Question, Quiz, QuizAttempt, User
 from ..schemas import (
     AnswerIn,
+    LearnerQuizOut,
+    QuizAttemptFullOut,
     QuizAttemptOut,
     QuizDetail,
     QuizDetailForLearner,
     QuizIn,
+    QuizManageOut,
     QuizOut,
     QuizSubmitIn,
     Message,
@@ -34,6 +38,79 @@ def _can_edit(db: Session, current: User, quiz_id: int) -> Quiz:
 @router.get("", response_model=list[QuizOut])
 def list_quizzes(course_id: int, db: Session = Depends(get_db)):
     return db.query(Quiz).filter(Quiz.course_id == course_id).order_by(Quiz.created_at.desc()).all()
+
+
+@router.get("/mine", response_model=list[QuizManageOut])
+def manage_quizzes(db: Session = Depends(get_db), current: User = Depends(instructor_or_admin)):
+    """Quizzes the instructor owns (or all quizzes for admins), for management."""
+    q = db.query(Quiz).options(selectinload(Quiz.course), selectinload(Quiz.questions))
+    if current.role != "admin":
+        q = q.join(Course, Quiz.course_id == Course.id).filter(Course.instructor_id == current.id)
+    quizzes = q.order_by(Quiz.created_at.desc()).all()
+    ids = [qz.id for qz in quizzes]
+    counts = {}
+    if ids:
+        rows = (
+            db.query(QuizAttempt.quiz_id, func.count(QuizAttempt.id))
+            .filter(QuizAttempt.quiz_id.in_(ids))
+            .group_by(QuizAttempt.quiz_id)
+            .all()
+        )
+        counts = dict(rows)
+    out = []
+    for qz in quizzes:
+        data = QuizManageOut.model_validate(qz)
+        data.course_title = qz.course.title
+        data.attempts_count = counts.get(qz.id, 0)
+        out.append(data)
+    return out
+
+
+@router.get("/my", response_model=list[LearnerQuizOut])
+def my_quizzes(db: Session = Depends(get_db), current: User = Depends(get_current_user)):
+    """Published quizzes for the learner's enrolled courses, with their attempt status."""
+    if current.role != "learner":
+        return []
+    course_ids = [e.course_id for e in db.query(Enrollment).filter(Enrollment.user_id == current.id).all()]
+    quizzes = []
+    if course_ids:
+        quizzes = (
+            db.query(Quiz)
+            .options(selectinload(Quiz.course))
+            .filter(Quiz.course_id.in_(course_ids), Quiz.is_published == True)
+            .order_by(Quiz.created_at.desc())
+            .all()
+        )
+    attempts = {}
+    if quizzes:
+        rows = (
+            db.query(QuizAttempt)
+            .filter(QuizAttempt.user_id == current.id, QuizAttempt.quiz_id.in_([q.id for q in quizzes]))
+            .all()
+        )
+        for a in rows:
+            attempts.setdefault(a.quiz_id, []).append(a)
+    out = []
+    for q in quizzes:
+        q_attempts = attempts.get(q.id, [])
+        best = max((a.percent for a in q_attempts), default=0.0)
+        out.append(
+            LearnerQuizOut(
+                id=q.id,
+                title=q.title,
+                description=q.description,
+                time_limit_min=q.time_limit_min,
+                pass_percent=q.pass_percent,
+                attempt_limit=q.attempt_limit,
+                course_id=q.course_id,
+                course_title=q.course.title,
+                attempts_taken=len(q_attempts),
+                best_percent=round(best, 1),
+                passed=any(a.passed for a in q_attempts),
+                can_take=len(q_attempts) < q.attempt_limit,
+            )
+        )
+    return out
 
 
 @router.get("/{quiz_id}", response_model=QuizDetail)
@@ -154,6 +231,40 @@ def update_quiz(
     return quiz
 
 
+@router.put("/{quiz_id}", response_model=QuizDetail)
+def replace_quiz(
+    quiz_id: int,
+    payload: QuizIn,
+    db: Session = Depends(get_db),
+    current: User = Depends(instructor_or_admin),
+):
+    """Full replace of a quiz's metadata AND questions (used by the manager)."""
+    quiz = _can_edit(db, current, quiz_id)
+    quiz.title = payload.title
+    quiz.description = payload.description
+    quiz.time_limit_min = payload.time_limit_min
+    quiz.pass_percent = payload.pass_percent
+    quiz.attempt_limit = payload.attempt_limit
+    quiz.is_published = payload.is_published
+    db.query(Question).filter(Question.quiz_id == quiz_id).delete()
+    db.flush()
+    for qi, q_data in enumerate(payload.questions):
+        db.add(Question(
+            prompt=q_data.prompt,
+            question_type=q_data.question_type,
+            options=q_data.options,
+            correct_answer=q_data.correct_answer,
+            explanation=q_data.explanation,
+            points=q_data.points,
+            position=q_data.position or qi,
+            quiz_id=quiz.id,
+        ))
+    db.add(AnalyticsEvent(event_name="quiz.updated", entity="quiz", entity_id=quiz.id, user_id=current.id))
+    db.commit()
+    db.refresh(quiz)
+    return quiz
+
+
 @router.delete("/{quiz_id}", response_model=Message)
 def delete_quiz(quiz_id: int, db: Session = Depends(get_db), current: User = Depends(instructor_or_admin)):
     quiz = _can_edit(db, current, quiz_id)
@@ -239,3 +350,29 @@ def my_attempts(quiz_id: int, db: Session = Depends(get_db), current: User = Dep
         .order_by(QuizAttempt.created_at.desc())
         .all()
     )
+
+
+@router.get("/{quiz_id}/attempts", response_model=list[QuizAttemptFullOut])
+def quiz_attempts(quiz_id: int, db: Session = Depends(get_db), current: User = Depends(instructor_or_admin)):
+    """All student attempts on a quiz (instructor/admin view)."""
+    _can_edit(db, current, quiz_id)
+    rows = (
+        db.query(QuizAttempt)
+        .filter(QuizAttempt.quiz_id == quiz_id)
+        .order_by(QuizAttempt.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    return [
+        QuizAttemptFullOut(
+            id=a.id,
+            score=a.score,
+            max_score=a.max_score,
+            percent=a.percent,
+            passed=a.passed,
+            answers=a.answers,
+            created_at=a.created_at,
+            student=a.user,
+        )
+        for a in rows
+    ]

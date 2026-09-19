@@ -17,6 +17,7 @@ from .routers import (
     notifications,
     parents,
     quizzes,
+    students,
     system,
     uploads,
     users,
@@ -44,7 +45,7 @@ run_migrations()
 
 for r in (auth.router, users.router, courses.router, enrollments.router, quizzes.router,
           forum.router, notifications.router, live.router, analytics.router, uploads.router,
-          parents.router, system.router):
+          parents.router, students.router, system.router):
     app.include_router(r, prefix=settings.API_PREFIX)
 
 

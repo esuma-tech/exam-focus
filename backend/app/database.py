@@ -91,3 +91,21 @@ def run_migrations() -> None:
                     """
                 )
             )
+
+        # Certificates / ID cards issued to students.
+        if "certificates" not in tables:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE certificates (
+                        id SERIAL PRIMARY KEY,
+                        kind VARCHAR(16) NOT NULL,
+                        course_title VARCHAR(255) NOT NULL DEFAULT '',
+                        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        issued_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                    )
+                    """
+                )
+            )
