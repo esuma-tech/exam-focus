@@ -7,12 +7,12 @@ import LiveManager from '../../components/LiveManager'
 
 const SUBJECTS = ['Mathematics', 'English', 'Physics', 'Chemistry', 'Biology', 'Geography', 'History', 'Economics', 'Aptitude']
 const GRADES = ['Grade 9', 'Grade 10', 'Grade 11', 'Grade 12']
-const blankLesson = () => ({ title: '', summary: '', content: '', video_url: '', duration_min: 30 })
+const blankLesson = () => ({ title: '', summary: '', content: '', video_url: '', attachment_url: '', duration_min: 30 })
 const blankModule = () => ({ title: '', description: '', lessons: [blankLesson()] })
 
 export default function CourseBuilder() {
   const { id } = useParams()
-  const isNew = id === 'new'
+  const isNew = id === 'new' || !id || !/^\d+$/.test(id)
   const { user } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({
@@ -126,6 +126,23 @@ export default function CourseBuilder() {
       await api(`/courses/${id}/lessons/${lesson.id}`, { method: 'PATCH', body: { [field]: res.url } })
       setSaved(kind === 'video' ? 'Video attached to lesson.' : 'Document attached to lesson.')
       refreshCourse()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setUploading(null)
+    }
+  }
+
+  const uploadDraftMedia = async (mi, li, kind, file) => {
+    if (!file) return
+    setUploading(`draft-${mi}-${li}`)
+    setError('')
+    setSaved('')
+    try {
+      const res = await uploadFile(file)
+      const field = kind === 'video' ? 'video_url' : 'attachment_url'
+      setLesson(mi, li, field, res.url)
+      setSaved(`${kind === 'video' ? 'Video' : 'Document'} staged — it saves with the module or course.`)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -258,12 +275,72 @@ export default function CourseBuilder() {
         <button className="btn-navy" disabled={busy}>{isNew ? 'Create course' : 'Save details'}</button>
       </form>
 
+      <div className="mt-10">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-black text-navy-900">Build curriculum</h2>
+            <p className="text-xs text-slate-500">
+              Add modules and lessons, then upload a video or PDF directly to any lesson.
+              {isNew ? ' Your modules and files are saved when you click "Create course".' : ' Save each module to attach its files.'}
+            </p>
+          </div>
+          <button onClick={addModule} className="btn-outline">+ Add module</button>
+        </div>
+
+        {form.modules.map((m, mi) => (
+          <div key={mi} className="card mb-4 border-2 border-dashed border-navy-200 p-5">
+            <div className="flex items-center gap-3">
+              <input className="input" placeholder="Module title" value={m.title} onChange={(e) => setModule(mi, 'title', e.target.value)} />
+              <button type="button" onClick={() => removeModule(mi)} className="btn-ghost !px-3 text-red-500">✕</button>
+            </div>
+            <input className="input mt-3" placeholder="Short module description" value={m.description} onChange={(e) => setModule(mi, 'description', e.target.value)} />
+            <div className="mt-4 space-y-3">
+              {m.lessons.map((l, li) => (
+                <div key={li} className="rounded-xl bg-slate-50 p-4">
+                  <div className="flex items-center gap-3">
+                    <input className="input" placeholder="Lesson title" value={l.title} onChange={(e) => setLesson(mi, li, 'title', e.target.value)} />
+                    <button type="button" onClick={() => removeLesson(mi, li)} className="btn-ghost !px-3 text-red-500">✕</button>
+                  </div>
+                  <textarea className="input mt-2" rows={2} placeholder="Lesson summary" value={l.summary} onChange={(e) => setLesson(mi, li, 'summary', e.target.value)} />
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <input className="input" placeholder="Video URL (optional)" value={l.video_url} onChange={(e) => setLesson(mi, li, 'video_url', e.target.value)} />
+                    <input className="input" type="number" placeholder="Duration (min)" value={l.duration_min} onChange={(e) => setLesson(mi, li, 'duration_min', e.target.value)} />
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <label className="btn-ghost !px-3 !py-1 text-xs cursor-pointer">
+                      🎬 Upload video
+                      <input type="file" className="hidden" accept="video/*" onChange={(e) => uploadDraftMedia(mi, li, 'video', e.target.files[0])} />
+                    </label>
+                    <label className="btn-ghost !px-3 !py-1 text-xs cursor-pointer">
+                      📄 Upload document
+                      <input type="file" className="hidden" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md" onChange={(e) => uploadDraftMedia(mi, li, 'doc', e.target.files[0])} />
+                    </label>
+                    {uploading === `draft-${mi}-${li}` && <span className="text-xs text-slate-400">Uploading…</span>}
+                    {l.video_url && <span className="chip bg-navy-100 text-navy-800">▶ Video added</span>}
+                    {l.attachment_url && <span className="chip bg-gold-100 text-yellow-800">📄 Doc added</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => addLesson(mi)} className="btn-ghost mt-3 text-navy-700">+ Add lesson</button>
+          </div>
+        ))}
+
+        {form.modules.length > 0 && (
+          !isNew ? (
+            <button onClick={addModules} className="btn-primary" disabled={busy}>Save {form.modules.length} module(s)</button>
+          ) : (
+            <span className="chip bg-mint-100 text-mint-700">📎 Modules and files are saved when you click “Create course”.</span>
+          )
+        )}
+      </div>
+
       {!isNew && (
         <>
           <div className="mt-10">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xl font-black text-navy-900">Curriculum</h2>
-              <button onClick={addModule} className="btn-outline">+ Add module</button>
+            <div className="mb-4">
+              <h2 className="text-xl font-black text-navy-900">Saved curriculum</h2>
+              <p className="text-xs text-slate-500">Manage lessons, attach or replace files, and edit modules.</p>
             </div>
 
             {courseData?.modules?.map((m, mi) => (
@@ -334,35 +411,8 @@ export default function CourseBuilder() {
                 </ul>
               </div>
             ))}
-
-            {form.modules.map((m, mi) => (
-              <div key={mi} className="card mb-4 border-2 border-dashed border-navy-200 p-5">
-                <div className="flex items-center gap-3">
-                  <input className="input" placeholder="Module title" value={m.title} onChange={(e) => setModule(mi, 'title', e.target.value)} />
-                  <button type="button" onClick={() => removeModule(mi)} className="btn-ghost !px-3 text-red-500">✕</button>
-                </div>
-                <input className="input mt-3" placeholder="Short module description" value={m.description} onChange={(e) => setModule(mi, 'description', e.target.value)} />
-                <div className="mt-4 space-y-3">
-                  {m.lessons.map((l, li) => (
-                    <div key={li} className="rounded-xl bg-slate-50 p-4">
-                      <div className="flex items-center gap-3">
-                        <input className="input" placeholder="Lesson title" value={l.title} onChange={(e) => setLesson(mi, li, 'title', e.target.value)} />
-                        <button type="button" onClick={() => removeLesson(mi, li)} className="btn-ghost !px-3 text-red-500">✕</button>
-                      </div>
-                      <textarea className="input mt-2" rows={2} placeholder="Lesson summary" value={l.summary} onChange={(e) => setLesson(mi, li, 'summary', e.target.value)} />
-                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                        <input className="input" placeholder="Video URL (optional)" value={l.video_url} onChange={(e) => setLesson(mi, li, 'video_url', e.target.value)} />
-                        <input className="input" type="number" placeholder="Duration (min)" value={l.duration_min} onChange={(e) => setLesson(mi, li, 'duration_min', e.target.value)} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <button type="button" onClick={() => addLesson(mi)} className="btn-ghost mt-3 text-navy-700">+ Add lesson</button>
-              </div>
-            ))}
-
-            {form.modules.length > 0 && (
-              <button onClick={addModules} className="btn-primary" disabled={busy}>Save {form.modules.length} module(s)</button>
+            {(!courseData || courseData.modules?.length === 0) && (
+              <p className="text-sm text-slate-500">Nothing saved yet — build a module above, then press save.</p>
             )}
           </div>
 
