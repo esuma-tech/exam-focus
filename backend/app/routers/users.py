@@ -5,18 +5,50 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import get_db
 from ..deps import admin_only, get_current_user
-from ..models import AnalyticsEvent, Notification, User
+from ..models import (
+    AnalyticsEvent,
+    Certificate,
+    ForumComment,
+    ForumPost,
+    LiveClass,
+    Notification,
+    User,
+)
 from ..schemas import Message, UserOut, UserUpdate
 from ..security import hash_password
 from ..services import storage
 
 router = APIRouter(prefix="/users", tags=["users"])
 settings = get_settings()
+
+
+def _delete_user_contents(db: Session, user: User) -> None:
+    """Remove rows that reference a user but aren't covered by an ORM cascade
+    before the user row itself is deleted (reject / delete account)."""
+    db.query(ForumComment).filter(ForumComment.author_id == user.id).delete(
+        synchronize_session=False
+    )
+    own_post_ids = select(ForumPost.id).where(ForumPost.author_id == user.id)
+    db.query(ForumComment).filter(ForumComment.post_id.in_(own_post_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(ForumPost).filter(ForumPost.author_id == user.id).delete(synchronize_session=False)
+    db.query(LiveClass).filter(LiveClass.instructor_id == user.id).delete(synchronize_session=False)
+    db.query(Certificate).filter(
+        or_(Certificate.student_id == user.id, Certificate.issued_by == user.id)
+    ).delete(synchronize_session=False)
+    db.query(AnalyticsEvent).filter(AnalyticsEvent.user_id == user.id).delete(
+        synchronize_session=False
+    )
+    for course in list(user.courses_taught):
+        db.query(LiveClass).filter(LiveClass.course_id == course.id).delete(synchronize_session=False)
+        db.delete(course)
 
 
 @router.get("", response_model=list[UserOut])
@@ -134,6 +166,7 @@ def reject_user(user_id: int, db: Session = Depends(get_db), _: User = Depends(a
         raise HTTPException(status_code=404, detail="User not found")
     if user.role == "admin":
         raise HTTPException(status_code=400, detail="Cannot reject an admin account")
+    _delete_user_contents(db, user)
     db.delete(user)
     db.commit()
     return Message(message="Registration rejected and account removed")
@@ -190,6 +223,7 @@ def delete_user(user_id: int, db: Session = Depends(get_db), _: User = Depends(a
         raise HTTPException(status_code=404, detail="User not found")
     if user.role == "admin":
         raise HTTPException(status_code=400, detail="Cannot delete an admin account")
+    _delete_user_contents(db, user)
     db.delete(user)
     db.commit()
     return Message(message="User deleted")

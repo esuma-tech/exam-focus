@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from ..config import get_settings
 from ..database import get_db
 from ..deps import get_current_user, get_optional_user, instructor_or_admin
-from ..models import AnalyticsEvent, Course, Enrollment, Lesson, Module, User
+from ..models import AnalyticsEvent, Course, Enrollment, Lesson, LiveClass, Module, User
 from ..schemas import (
     CourseDetail,
     CourseIn,
@@ -255,6 +255,10 @@ def delete_course(course_id: int, db: Session = Depends(get_db), current: User =
         raise HTTPException(status_code=404, detail="Course not found")
     if current.role != "admin" and course.instructor_id != current.id:
         raise HTTPException(status_code=403, detail="You can only delete your own courses")
+    # Live classes reference the course without a cascade rule, so remove them
+    # first; other children (modules, lessons, enrollments, quizzes, forums)
+    # are removed by the ORM cascade.
+    db.query(LiveClass).filter(LiveClass.course_id == course_id).delete()
     db.delete(course)
     db.commit()
     return Message(message="Course deleted")
