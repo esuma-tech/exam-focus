@@ -21,6 +21,8 @@ ALLOWED_EXTENSIONS = {
     "audio": {".mp3", ".ogg", ".wav", ".m4a"},
 }
 MAX_SIZE = 250 * 1024 * 1024  # 250 MB
+RECEIPT_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"}
+MAX_RECEIPT = 10 * 1024 * 1024  # 10 MB
 
 
 def _upload_dir() -> Path:
@@ -78,6 +80,38 @@ def upload_file(file: UploadFile = File(...), _: User = Depends(get_current_user
         "url": f"{settings.API_PREFIX}/uploads/{filename}",
         "absolute_url": f"{settings.PUBLIC_BASE_URL}{settings.API_PREFIX}/uploads/{filename}",
     }
+
+
+@router.post("/receipt")
+def upload_receipt(file: UploadFile = File(...)):
+    """Public upload for a registration payment receipt / enrolment ticket
+    (image or PDF). Called before the user account exists, so no auth."""
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in RECEIPT_EXTS:
+        raise HTTPException(status_code=400, detail="Receipt must be an image or PDF")
+
+    buf = BytesIO()
+    size = 0
+    while chunk := file.file.read(1024 * 1024):
+        size += len(chunk)
+        if size > MAX_RECEIPT:
+            raise HTTPException(status_code=413, detail="Receipt too large (max 10 MB)")
+        buf.write(chunk)
+    buf.seek(0)
+
+    if storage.storage_enabled():
+        key = f"receipts/{uuid.uuid4().hex[:20]}{ext}"
+        content_type = mimetypes.guess_type(file.filename or "")[0] or "application/octet-stream"
+        url = storage.put_object(key, buf, content_type)
+        return {"url": url}
+
+    filename = f"{uuid.uuid4().hex[:16]}{ext}"
+    dest = _upload_dir() / filename
+    with dest.open("wb") as out:
+        buf.seek(0)
+        while chunk := buf.read(1024 * 1024):
+            out.write(chunk)
+    return {"url": f"{settings.API_PREFIX}/uploads/{filename}"}
 
 
 @router.get("/{filename}")

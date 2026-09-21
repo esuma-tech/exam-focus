@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { useAuth } from '../store'
+import DocViewer from './DocViewer'
 
 const THEMES = {
   light: { bg: 'bg-white', text: 'text-slate-700', title: 'text-navy-900', chip: 'bg-white', border: 'border-slate-200' },
@@ -20,6 +22,7 @@ function readingTime(words) {
 export default function Reader({ lesson, completed, onComplete, onNext }) {
   const [size, setSize] = useState(18)
   const [theme, setTheme] = useState('light')
+  const { user } = useAuth()
 
   const t = THEMES[theme]
   const words = useMemo(() => stripHtml(lesson.content).split(/\s+/).filter(Boolean).length, [lesson.content])
@@ -71,13 +74,15 @@ export default function Reader({ lesson, completed, onComplete, onNext }) {
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm font-bold text-navy-900">📄 Lesson document</span>
               {lesson.attachment_url.toLowerCase().endsWith('.pdf') ? (
-                <a href={lesson.attachment_url} download className="btn-outline !px-4 !py-1.5 text-xs">⬇ Download PDF</a>
+                <span className="chip bg-slate-100 text-slate-600">View on platform only</span>
               ) : (
-                <a href={lesson.attachment_url} target="_blank" rel="noreferrer" className="btn-outline !px-4 !py-1.5 text-xs">Open document</a>
+                <a href={lesson.attachment_url} target="_blank" rel="noreferrer" className="btn-outline !px-4 !py-1.5 text-xs">
+                  Open document
+                </a>
               )}
             </div>
             {lesson.attachment_url.toLowerCase().endsWith('.pdf') && (
-              <iframe src={lesson.attachment_url} title="Lesson document" className="mt-3 h-[75vh] w-full rounded-xl border border-slate-200 bg-white" />
+              <DocViewer url={lesson.attachment_url} title={lesson.title} watermark={`${user?.full_name || ''} · ${user?.email || ''}`} />
             )}
           </div>
         )}

@@ -22,6 +22,7 @@ class RegisterRequest(BaseModel):
     role: Literal["learner", "instructor", "parent"] = "learner"
     grade: str = ""
     student_ids: list[str] = []  # required for parents: 6-digit IDs of their children
+    receipt_url: str = ""  # mandatory for learners: scanned payment receipt / enrolment ticket
 
 
 class TokenResponse(BaseModel):
@@ -48,6 +49,7 @@ class UserOut(ORMModel):
     bio: str
     grade: str
     student_id: str | None = None
+    receipt_url: str = ""
     created_at: datetime
 
 

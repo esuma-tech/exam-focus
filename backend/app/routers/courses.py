@@ -1,9 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException
+import hashlib
+import hmac
+import mimetypes
+import re
+import time
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, selectinload
 
+from ..config import get_settings
 from ..database import get_db
 from ..deps import get_current_user, get_optional_user, instructor_or_admin
-from ..models import AnalyticsEvent, Course, Lesson, Module, User
+from ..models import AnalyticsEvent, Course, Enrollment, Lesson, Module, User
 from ..schemas import (
     CourseDetail,
     CourseIn,
@@ -21,6 +30,80 @@ from ..services import storage
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
+settings = get_settings()
+
+MEDIA_TOKEN_TTL = 12 * 3600  # signed lesson media links stay valid for 12 hours
+
+
+def _is_real_media_url(value: str) -> bool:
+    """True when the stored value points at real content (S3 key or local
+    upload), not at a backend signed-media path returned to clients."""
+    if not value:
+        return False
+    s3_prefix = settings.AWS_ENDPOINT_URL_S3
+    return (
+        bool(s3_prefix) and value.startswith(s3_prefix)
+    ) or value.startswith(f"{settings.API_PREFIX}/uploads/")
+
+
+def _media_sig(lesson_id: int, kind: str, exp: int) -> str:
+    msg = f"{lesson_id}:{kind}:{exp}".encode()
+    return hmac.new(settings.SECRET_KEY.encode(), msg, hashlib.sha256).hexdigest()
+
+
+def _verify_media_sig(lesson_id: int, kind: str, exp: int | None, sig: str) -> None:
+    if not exp or time.time() > exp:
+        raise HTTPException(status_code=403, detail="Media link has expired")
+    expected = _media_sig(lesson_id, kind, exp)
+    if not sig or not hmac.compare_digest(sig, expected):
+        raise HTTPException(status_code=403, detail="Invalid media link")
+
+
+def _media_url(lesson_id: int, course_id: int, kind: str) -> str:
+    exp = int(time.time()) + MEDIA_TOKEN_TTL
+    sig = _media_sig(lesson_id, kind, exp)
+    return (
+        f"{settings.API_PREFIX}/courses/{course_id}/lessons/{lesson_id}/media"
+        f"?kind={kind}&exp={exp}&sig={sig}"
+    )
+
+
+def _authorized_for_content(db: Session, current: User, course_id: int) -> bool:
+    if current.role == "admin":
+        return True
+    course = db.get(Course, course_id)
+    if not course:
+        return False
+    if current.role == "instructor" and course.instructor_id == current.id:
+        return True
+    if current.role == "learner":
+        seeded = (
+            db.query(Enrollment)
+            .filter(Enrollment.user_id == current.id, Enrollment.course_id == course_id)
+            .first()
+        )
+        return seeded is not None
+    return False
+
+
+def _apply_lesson_media(lesson: Lesson, course: Course, db: Session, current: User | None) -> None:
+    """Mask lesson media before serialization: enrolled learners get signed,
+    expiring backend links; everyone else gets no direct storage URL."""
+    is_owner = current is not None and (
+        current.role == "admin"
+        or (current.role == "instructor" and course.instructor_id == current.id)
+    )
+    if is_owner:
+        return  # teachers/admins manage the real files
+    if current is not None and _authorized_for_content(db, current, course.id):
+        if lesson.video_url:
+            lesson.video_url = _media_url(lesson.id, course.id, "video")
+        if lesson.attachment_url:
+            lesson.attachment_url = _media_url(lesson.id, course.id, "file")
+    else:
+        lesson.video_url = ""
+        lesson.attachment_url = ""
+
 
 def _owned_course(course_id: int, db: Session, current: User) -> Course:
     course = db.get(Course, course_id)
@@ -31,10 +114,13 @@ def _owned_course(course_id: int, db: Session, current: User) -> Course:
     return course
 
 
-def _course_with_children(course: Course) -> CourseDetail:
+def _course_with_children(course: Course, db: Session, current: User | None = None) -> CourseDetail:
     detail = CourseDetail.model_validate(course)
     detail.enrollment_count = len(course.enrollments)
     detail.instructor = course.instructor
+    for mod in course.modules:
+        for lesson in mod.lessons:
+            _apply_lesson_media(lesson, course, db, current)
     detail.modules = course.modules
     return detail
 
@@ -70,7 +156,11 @@ def list_subjects(db: Session = Depends(get_db)):
 
 
 @router.get("/{course_id}", response_model=CourseDetail)
-def get_course(course_id: int, db: Session = Depends(get_db)):
+def get_course(
+    course_id: int,
+    db: Session = Depends(get_db),
+    current: User | None = Depends(get_optional_user),
+):
     course = (
         db.query(Course)
         .options(selectinload(Course.instructor), selectinload(Course.modules).selectinload(Module.lessons))
@@ -79,7 +169,7 @@ def get_course(course_id: int, db: Session = Depends(get_db)):
     )
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
-    return _course_with_children(course)
+    return _course_with_children(course, db, current)
 
 
 @router.post("", response_model=CourseDetail, status_code=201)
@@ -128,7 +218,7 @@ def create_course(
         .filter(Course.id == course.id)
         .first()
     )
-    return _course_with_children(course)
+    return _course_with_children(course, db, current)
 
 
 @router.patch("/{course_id}", response_model=CourseDetail)
@@ -155,7 +245,7 @@ def update_course(
         .filter(Course.id == course.id)
         .first()
     )
-    return _course_with_children(course)
+    return _course_with_children(course, db, current)
 
 
 @router.delete("/{course_id}", response_model=Message)
@@ -190,7 +280,7 @@ def add_module(
             duration_min=les_data.duration_min, position=les_data.position or li, module_id=mod.id,
         ))
     db.commit()
-    return get_course(course_id, db)
+    return get_course(course_id, db, current)
 
 
 @router.patch("/{course_id}/modules/{module_id}", response_model=ModuleOut)
@@ -244,6 +334,11 @@ def update_lesson(
     if not lesson or lesson.module.course_id != course_id:
         raise HTTPException(status_code=404, detail="Lesson not found")
     data = payload.model_dump(exclude_unset=True)
+    # Ignore masked backend links if they are ever echoed back; only accept
+    # genuine storage URLs for video/attachments.
+    for field in ("video_url", "attachment_url"):
+        if field in data and not _is_real_media_url(data[field]):
+            data.pop(field, None)
     if "video_url" in data:
         storage.delete_by_url(lesson.video_url)
     if "attachment_url" in data:
@@ -252,6 +347,8 @@ def update_lesson(
         setattr(lesson, key, value)
     db.commit()
     db.refresh(lesson)
+    course = db.get(Course, course_id)
+    _apply_lesson_media(lesson, course, db, current)
     return lesson
 
 
@@ -271,3 +368,98 @@ def delete_lesson(
     db.delete(lesson)
     db.commit()
     return Message(message="Lesson deleted")
+
+
+def _parse_range(range_header: str | None, size: int) -> tuple[int | None, int | None]:
+    """Return (start, end) for a bytes range, or (None, None) for the whole file."""
+    m = re.match(r"^bytes=(\d*)-(\d*)$", range_header or "")
+    if not m:
+        return None, None
+    start_s, end_s = m.groups()
+    if start_s == "" and end_s == "":
+        return None, None
+    if start_s == "":
+        start = max(size - int(end_s), 0)
+        end = size - 1
+    else:
+        start = int(start_s)
+        end = min(int(end_s), size - 1) if end_s else size - 1
+    if start >= size or end < start:
+        return None, None
+    return start, end
+
+
+def _stream_s3(key: str, range_header: str | None) -> StreamingResponse:
+    client = storage._client()
+    head = client.head_object(Bucket=settings.STORAGE_BUCKET, Key=key)
+    size = int(head["ContentLength"])
+    content_type = head.get("ContentType") or mimetypes.guess_type(key)[0] or "application/octet-stream"
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Type": content_type,
+        "X-Content-Type-Options": "nosniff",
+    }
+    start, end = _parse_range(range_header, size)
+    if range_header and start is None:
+        raise HTTPException(
+            status_code=416,
+            detail="Range not satisfiable",
+            headers={"Content-Range": f"bytes */{size}"},
+        )
+    if start is None:
+        body = client.get_object(Bucket=settings.STORAGE_BUCKET, Key=key)["Body"]
+        headers["Content-Length"] = str(size)
+        return StreamingResponse(body, headers=headers)
+    length = end - start + 1
+    body = client.get_object(
+        Bucket=settings.STORAGE_BUCKET, Key=key, Range=f"bytes={start}-{end}"
+    )["Body"]
+    headers.update(
+        {
+            "Content-Range": f"bytes {start}-{end}/{size}",
+            "Content-Length": str(length),
+        }
+    )
+    return StreamingResponse(body, status_code=206, headers=headers)
+
+
+@router.get("/{course_id}/lessons/{lesson_id}/media")
+def lesson_media(
+    course_id: int,
+    lesson_id: int,
+    kind: str = "video",
+    exp: int = 0,
+    sig: str = "",
+    range_header: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+    current: User = Depends(get_current_user),
+):
+    """Stream a lesson's video or attachment behind a short-lived signed link.
+    Requires a logged-in, enrolled viewer; respects HTTP Range for video."""
+    if kind not in ("video", "file"):
+        raise HTTPException(status_code=400, detail="Unknown media kind")
+    lesson = db.get(Lesson, lesson_id)
+    if not lesson or lesson.module.course_id != course_id:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    _verify_media_sig(lesson_id, kind, exp, sig)
+    if not _authorized_for_content(db, current, course_id):
+        raise HTTPException(status_code=403, detail="You are not enrolled in this course")
+
+    url = lesson.video_url if kind == "video" else lesson.attachment_url
+    if not url:
+        raise HTTPException(status_code=404, detail="No media for this lesson")
+
+    key = storage.key_from_url(url)
+    if key:
+        return _stream_s3(key, range_header)
+
+    filename = Path(url).name
+    local = Path(settings.UPLOAD_DIR).resolve() / filename
+    if not local.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        local,
+        media_type=mimetypes.guess_type(url)[0] or "application/octet-stream",
+        headers={"X-Content-Type-Options": "nosniff"},
+    )

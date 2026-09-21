@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../../api'
+import { useAuth } from '../../store'
+import DocViewer from '../../components/DocViewer'
 import Forum from '../../components/Forum'
 import Reader from '../../components/Reader'
 import { Loading, ProgressBar } from '../../components/ui'
@@ -10,6 +12,7 @@ const TABS = ['Lessons', 'Quizzes', 'Discussion']
 export default function CoursePlayer() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [params] = useSearchParams()
   const view = params.get('view') || ''
   const [course, setCourse] = useState(null)
@@ -18,7 +21,6 @@ export default function CoursePlayer() {
   const [live, setLive] = useState([])
   const [lesson, setLesson] = useState(null)
   const [readMode, setReadMode] = useState(view === 'read')
-  const [showDoc, setShowDoc] = useState(false)
   const [tab, setTab] = useState('Lessons')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -206,24 +208,39 @@ export default function CoursePlayer() {
                 <h2 className="text-2xl font-black text-navy-900">{lesson.title}</h2>
                 <p className="mt-1 text-sm font-medium text-slate-500">{lesson.duration_min ? `${lesson.duration_min} min` : ''}</p>
                 {lesson.video_url && (
-                  <video className="mt-5 w-full rounded-xl bg-black" controls src={lesson.video_url} />
+                  <div className="relative mt-5 select-none" onContextMenu={(e) => e.preventDefault()}>
+                    <video
+                      className="w-full rounded-xl bg-black"
+                      controls
+                      controlsList="nodownload noremoteplayback noplaybackrate"
+                      disablePictureInPicture
+                      onContextMenu={(e) => e.preventDefault()}
+                      src={lesson.video_url}
+                    />
+                    {user?.email && (
+                      <span className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center">
+                        <span className="select-none rounded-full bg-black/55 px-3 py-1 text-[11px] font-semibold text-white/75">
+                          {user.full_name} · {user.email}
+                        </span>
+                      </span>
+                    )}
+                  </div>
                 )}
                 <div className="prose prose-slate mt-6 max-w-none text-slate-600" dangerouslySetInnerHTML={{ __html: lesson.content }} />
                 {lesson.attachment_url && (
                   <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="text-sm font-bold text-navy-900">📄 Lesson document</span>
-                      <button className="btn-navy !px-4 !py-1.5 text-xs" onClick={() => setShowDoc((s) => !s)}>
-                        {showDoc ? 'Hide' : 'View on platform'}
-                      </button>
-                      <a href={lesson.attachment_url} download className="btn-outline !px-4 !py-1.5 text-xs">⬇ Download</a>
-                    </div>
-                    {showDoc && (
-                      lesson.attachment_url.toLowerCase().endsWith('.pdf') ? (
-                        <iframe src={lesson.attachment_url} title="Document viewer" className="mt-3 h-[70vh] w-full rounded-xl border border-slate-200 bg-white" />
+                      {lesson.attachment_url.toLowerCase().endsWith('.pdf') ? (
+                        <span className="chip bg-slate-100 text-slate-600">View on platform only</span>
                       ) : (
-                        <a href={lesson.attachment_url} target="_blank" rel="noreferrer" className="btn-outline mt-3">Open document in new tab</a>
-                      )
+                        <a href={lesson.attachment_url} target="_blank" rel="noreferrer" className="btn-outline !px-4 !py-1.5 text-xs">
+                          Open document
+                        </a>
+                      )}
+                    </div>
+                    {lesson.attachment_url.toLowerCase().endsWith('.pdf') && (
+                      <DocViewer url={lesson.attachment_url} title={lesson.title} watermark={`${user?.full_name || ''} · ${user?.email || ''}`} />
                     )}
                   </div>
                 )}

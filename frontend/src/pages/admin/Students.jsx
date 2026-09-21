@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { downloadPdf } from '../../api'
+import { api, downloadPdf } from '../../api'
 import { EmptyState, ErrorBox, Loading } from '../../components/ui'
 
 export default function AdminStudents() {
@@ -56,8 +56,9 @@ export default function AdminStudents() {
   const download = async (kind) => {
     setBusy(kind)
     setError('')
+    const file = kind === 'certificate' ? 'certificate.pdf' : 'id-card.pdf'
     try {
-      await downloadPdf(`/students/${selectedId}/${kind}`, `${kind}-${selectedId}.pdf`)
+      await downloadPdf(`/students/${selectedId}/${file}`, `${file.replace('.pdf', '')}-${selectedId}.pdf`)
     } catch (e) {
       setError(e.message)
     } finally {

@@ -59,6 +59,8 @@ def run_migrations() -> None:
         # 6-digit student IDs for learner accounts.
         if "users" in tables:
             cols = {c["name"] for c in inspect(conn).get_columns("users")}
+            if "receipt_url" not in cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN receipt_url VARCHAR(512) DEFAULT ''"))
             if "student_id" not in cols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN student_id VARCHAR(6)"))
                 conn.execute(

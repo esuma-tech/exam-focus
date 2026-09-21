@@ -40,6 +40,7 @@ class User(Base, TimestampMixin):
     bio: Mapped[str] = mapped_column(Text, default="", nullable=False)
     grade: Mapped[str] = mapped_column(String(32), default="", nullable=False)
     student_id: Mapped[str | None] = mapped_column(String(6), unique=True, index=True, nullable=True)
+    receipt_url: Mapped[str] = mapped_column(String(512), default="", nullable=False)
 
     courses_taught = relationship("Course", back_populates="instructor")
     enrollments = relationship("Enrollment", back_populates="user", cascade="all, delete-orphan")

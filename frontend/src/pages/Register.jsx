@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../store'
+import { api } from '../api'
 import { ErrorBox } from '../components/ui'
 
 const ROLES = [
@@ -16,6 +17,7 @@ export default function Register() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [receipt, setReceipt] = useState(null)
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
@@ -43,6 +45,16 @@ export default function Register() {
     }
     setBusy(true)
     try {
+      if (form.role === 'learner') {
+        if (!receipt) {
+          setError('Please attach your payment receipt or enrolment ticket.')
+          return
+        }
+        const up = new FormData()
+        up.append('file', receipt)
+        const uploaded = await api('/uploads/receipt', { method: 'POST', form: up })
+        form.receipt_url = uploaded.url
+      }
       const data = await register(form)
       setMessage(data.message || 'Your account was created and is waiting for administrator approval.')
     } catch (err) {
@@ -166,6 +178,34 @@ export default function Register() {
             <div className="rounded-xl border border-mint-200 bg-mint-50 p-4 text-sm text-navy-800">
               🎓 A unique <strong>6-digit student ID</strong> is assigned to you when your account is created. You'll see it on
               your dashboard — share it with your parent so they can follow your progress.
+            </div>
+          )}
+
+          {form.role === 'learner' && (
+            <div className="rounded-xl border border-slate-200 p-4">
+              <label className="label">Payment receipt or enrolment ticket (required)</label>
+              <p className="mb-3 text-xs text-slate-500">
+                Take a clear photo of your bank/telebirr receipt or upload the PDF ticket. The administrator reviews it
+                before approving your account. Images and PDFs only, max 10 MB.
+              </p>
+              <label className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-4 transition hover:border-navy-400 hover:bg-navy-50">
+                <span className="text-2xl">🧾</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-navy-900">Browse ticket</span>
+                  <span className="block truncate text-xs text-slate-500">
+                    {receipt ? receipt.name : 'No file chosen — JPG, PNG, GIF or PDF'}
+                  </span>
+                </span>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,image/*,application/pdf"
+                  onChange={(e) => setReceipt(e.target.files?.[0] || null)}
+                />
+              </label>
+              {form.role === 'learner' && !receipt && (
+                <p className="mt-2 text-xs font-semibold text-amber-600">Upload your receipt so an administrator can approve you.</p>
+              )}
             </div>
           )}
 

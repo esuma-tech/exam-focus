@@ -41,6 +41,12 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=409, detail="An account with this email already exists")
 
+    if payload.role == "learner" and not payload.receipt_url.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Students must attach a payment receipt or enrolment ticket to register.",
+        )
+
     if payload.role == "parent":
         student_ids = _resolve_student_ids(db, payload.student_ids)
         if not student_ids:
@@ -60,6 +66,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         password_hash=hash_password(payload.password),
         is_active=True,
         is_approved=False,
+        receipt_url=(payload.receipt_url or "").strip(),
     )
     if payload.role == "learner":
         user.student_id = generate_student_id(db)

@@ -177,6 +177,21 @@ export default function AdminUsers() {
                   <span className={`chip ${roles[u.role]?.color} font-bold`}>{roles[u.role]?.label}</span>
                   {u.grade && <span className="chip bg-slate-100 text-slate-600">{u.grade}</span>}
                 </div>
+                {u.receipt_url ? (
+                  <a
+                    href={u.receipt_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-flex max-w-full items-center gap-1.5 truncate rounded-lg bg-gold-100 px-2.5 py-1.5 text-xs font-bold text-gold-800 hover:bg-gold-200"
+                    title={u.receipt_url}
+                  >
+                    🧾 View receipt / ticket
+                  </a>
+                ) : u.role === 'learner' ? (
+                  <p className="mt-3 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-500">
+                    ⚠ Learner has no receipt attached
+                  </p>
+                ) : null}
                 <div className="mt-3 flex gap-2">
                   <button className="btn-navy !py-1.5 !px-3 text-xs" onClick={() => approveUser(u)}>Approve</button>
                   <button className="btn-ghost !py-1.5 !px-3 text-xs !text-red-500" onClick={() => rejectUser(u)}>Reject</button>
