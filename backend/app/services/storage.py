@@ -1,5 +1,7 @@
 from typing import BinaryIO
 
+import mimetypes
+
 from ..config import get_settings
 
 settings = get_settings()
@@ -48,6 +50,19 @@ def key_from_url(url: str) -> str | None:
     if url.startswith(prefix):
         return url[len(prefix):].split("?")[0]
     return None
+
+
+def read_object(key: str) -> tuple[BinaryIO, str]:
+    """Stream a stored object back to an authenticated caller."""
+    client = _client()
+    head = client.head_object(Bucket=settings.STORAGE_BUCKET, Key=key)
+    content_type = (
+        head.get("ContentType")
+        or mimetypes.guess_type(key)[0]
+        or "application/octet-stream"
+    )
+    body = client.get_object(Bucket=settings.STORAGE_BUCKET, Key=key)["Body"]
+    return body, content_type
 
 
 def delete_by_url(url: str) -> None:

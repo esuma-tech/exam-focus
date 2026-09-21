@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, roles } from '../../api'
+import { api, downloadPdf, fetchBlob, roles } from '../../api'
 import { ErrorBox, Loading } from '../../components/ui'
 
 const ROLE_OPTIONS = ['learner', 'instructor', 'parent', 'admin']
@@ -103,6 +103,23 @@ export default function AdminUsers() {
     } catch (e) { setError(e.message) }
   }
 
+  // Receipts are admin-only: fetch with the auth header, then show/save the blob.
+  const openReceipt = async (u) => {
+    try {
+      const blob = await fetchBlob(`/users/${u.id}/receipt`)
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener')
+      setTimeout(() => URL.revokeObjectURL(url), 120000)
+    } catch (e) { setError(e.message) }
+  }
+
+  const downloadReceipt = async (u) => {
+    try {
+      const safe = u.full_name.replace(/\s+/g, '-').toLowerCase()
+      await downloadPdf(`/users/${u.id}/receipt`, `receipt-${safe}`)
+    } catch (e) { setError(e.message) }
+  }
+
   const sendBroadcast = async () => {
     try {
       await api('/notifications/broadcast', { method: 'POST', body: { ...broadcast, user_id: 0 } })
@@ -178,15 +195,21 @@ export default function AdminUsers() {
                   {u.grade && <span className="chip bg-slate-100 text-slate-600">{u.grade}</span>}
                 </div>
                 {u.receipt_url ? (
-                  <a
-                    href={u.receipt_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-3 inline-flex max-w-full items-center gap-1.5 truncate rounded-lg bg-gold-100 px-2.5 py-1.5 text-xs font-bold text-gold-800 hover:bg-gold-200"
-                    title={u.receipt_url}
-                  >
-                    🧾 View receipt / ticket
-                  </a>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => openReceipt(u)}
+                      className="inline-flex items-center gap-1.5 truncate rounded-lg bg-gold-100 px-2.5 py-1.5 text-xs font-bold text-gold-800 hover:bg-gold-200"
+                      title={u.receipt_url}
+                    >
+                      🧾 View receipt
+                    </button>
+                    <button
+                      onClick={() => downloadReceipt(u)}
+                      className="inline-flex items-center gap-1.5 truncate rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200"
+                    >
+                      ⬇ Download
+                    </button>
+                  </div>
                 ) : u.role === 'learner' ? (
                   <p className="mt-3 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-500">
                     ⚠ Learner has no receipt attached

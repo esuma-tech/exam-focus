@@ -4,6 +4,7 @@ from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -15,6 +16,7 @@ from ..security import hash_password
 from ..services import storage
 
 router = APIRouter(prefix="/users", tags=["users"])
+settings = get_settings()
 
 
 @router.get("", response_model=list[UserOut])
@@ -36,6 +38,37 @@ def list_users(
 @router.get("/instructors", response_model=list[UserOut])
 def list_instructors(db: Session = Depends(get_db)):
     return db.query(User).filter(User.role == "instructor", User.is_active == True).all()
+
+
+@router.get("/{user_id}/receipt")
+def download_receipt(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(admin_only),
+):
+    """Stream a learner's registration receipt for admins. The file may live
+    in object storage (S3) or on local disk (dev fallback), never exposed
+    publicly to non-admins."""
+    user = db.get(User, user_id)
+    if not user or not user.receipt_url:
+        raise HTTPException(status_code=404, detail="No receipt attached")
+    filename = Path(user.receipt_url).name
+    content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    headers = {
+        "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": f'inline; filename="{filename}"',
+    }
+
+    key = storage.key_from_url(user.receipt_url)
+    if key:
+        body, ct = storage.read_object(key)
+        headers["Content-Type"] = ct
+        return StreamingResponse(body, headers=headers, media_type=ct)
+
+    local = Path(settings.UPLOAD_DIR).resolve() / filename
+    if not local.exists():
+        raise HTTPException(status_code=404, detail="Receipt file missing")
+    return FileResponse(local, media_type=content_type, headers=headers)
 
 
 _AVATAR_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}

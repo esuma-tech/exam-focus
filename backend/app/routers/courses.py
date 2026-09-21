@@ -433,17 +433,21 @@ def lesson_media(
     sig: str = "",
     range_header: str | None = Header(default=None),
     db: Session = Depends(get_db),
-    current: User = Depends(get_current_user),
+    current: User | None = Depends(get_optional_user),
 ):
     """Stream a lesson's video or attachment behind a short-lived signed link.
-    Requires a logged-in, enrolled viewer; respects HTTP Range for video."""
+
+    The signed URL is the credential (expired links and forgeries are
+    rejected); browsers load media without an Authorization header, so the
+    signature alone must authorize the fetch. A logged-in viewer who is not
+    enrolled is still rejected."""
     if kind not in ("video", "file"):
         raise HTTPException(status_code=400, detail="Unknown media kind")
     lesson = db.get(Lesson, lesson_id)
     if not lesson or lesson.module.course_id != course_id:
         raise HTTPException(status_code=404, detail="Lesson not found")
     _verify_media_sig(lesson_id, kind, exp, sig)
-    if not _authorized_for_content(db, current, course_id):
+    if current is not None and not _authorized_for_content(db, current, course_id):
         raise HTTPException(status_code=403, detail="You are not enrolled in this course")
 
     url = lesson.video_url if kind == "video" else lesson.attachment_url

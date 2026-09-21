@@ -125,6 +125,23 @@ export async function downloadPdf(path, fallbackName = 'download.pdf') {
   URL.revokeObjectURL(url)
 }
 
+// Fetch a file with the auth header attached and hand back a blob (used to
+// view admin-only documents without exposing them via a plain URL).
+export async function fetchBlob(path) {
+  const token = getToken()
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    let detail = 'Request failed'
+    try {
+      detail = (await res.json()).detail || detail
+    } catch {}
+    throw new Error(detail)
+  }
+  return res.blob()
+}
+
 export const roles = {
   admin: { label: 'Administrator', color: 'bg-red-100 text-red-700' },
   instructor: { label: 'Instructor', color: 'bg-navy-100 text-navy-800' },
