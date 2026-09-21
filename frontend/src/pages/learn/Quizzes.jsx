@@ -29,7 +29,7 @@ export default function LearnerQuizzes() {
       const form = new FormData()
       form.append('file', file)
       const res = await api('/users/me/avatar', { method: 'POST', form })
-      setPhotoMsg(`Photo saved.${res.avatar ? ' It will appear on your ID card.' : ''}`)
+      setPhotoMsg(`Photo saved.${res.avatar ? ' Your ID card is ready to download from My ID card.' : ''}`)
     } catch (err) {
       setPhotoMsg(err.message)
     } finally {

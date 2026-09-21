@@ -1,5 +1,6 @@
 """Generate certificate and student ID-card PDFs with reportlab."""
 
+import hashlib
 import io
 import urllib.request
 from datetime import datetime
@@ -96,7 +97,7 @@ def _fetch_image(url: str) -> bytes | None:
 
 
 def _draw_photo(c, initials, url, cx, cy, r):
-    """Draw a circular photo (or an initials monogram) centred at (cx, cy+base)."""
+    """Draw a circular photo (or an initials monogram) with a double ring."""
     data = _fetch_image(url) if url else None
     img = None
     if data:
@@ -114,17 +115,20 @@ def _draw_photo(c, initials, url, cx, cy, r):
         c.clipPath(p, stroke=0)
         c.drawImage(img, cx - r, cy, 2 * r, 2 * r, mask="auto")
         c.restoreState()
-        c.setStrokeColor(NAVY)
-        c.setLineWidth(2.5)
-        c.circle(cx, cy + r, r, stroke=1, fill=0)
-        return
-    # Monogram fallback.
-    c.setStrokeColor(NAVY)
-    c.setLineWidth(2.5)
-    c.circle(cx, cy + r, r, stroke=1, fill=0)
+    # Monogram fallback (navy fill).
     c.setFillColor(NAVY)
-    c.setFont(FONT_TB, r * 0.7)
-    c.drawCentredString(cx, cy + r * 0.55, initials)
+    c.circle(cx, cy + r, r, stroke=0, fill=(img is None))
+    if img is None:
+        c.setFillColor(colors.white)
+        c.setFont(FONT_TB, r * 0.6)
+        c.drawCentredString(cx, cy + r * 0.55, initials)
+    # Double ring: gold outer, navy inner.
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(3.2)
+    c.circle(cx, cy + r, r + 3.2, stroke=1, fill=0)
+    c.setStrokeColor(NAVY)
+    c.setLineWidth(1.3)
+    c.circle(cx, cy + r, r, stroke=1, fill=0)
 
 
 def build_certificate_pdf(student_full_name: str, course_title: str, issuer_name: str) -> bytes:
@@ -214,87 +218,241 @@ def build_certificate_pdf(student_full_name: str, course_title: str, issuer_name
     return buf
 
 
+def _session_label() -> str:
+    """Current academic session, e.g. 2026/2027 (September start)."""
+    now = datetime.now()
+    year = now.year if now.month >= 9 else now.year - 1
+    return f"{year}/{year + 1}"
+
+
+def _barcode(c, text, cx, y, width, height):
+    """Deterministic barcode-style bars derived from the given string."""
+    digest = hashlib.sha256(text.encode()).digest()
+    bars = 38
+    slot = width / bars
+    x = cx - width / 2
+    c.saveState()
+    c.setFillColor(INK)
+    for i in range(bars):
+        b = digest[i % len(digest)]
+        w = slot * (1.7 if b % 2 else 0.9)
+        h = height * (0.72 if b % 4 == 0 else 1.0)
+        c.rect(x, y, max(w, 0.7), h, stroke=0, fill=1)
+        x += w + max(0.5, slot * 0.3)
+    c.restoreState()
+
+
+def _card_back(c, x, y, w, h):
+    """Cream card base with double frame; coordinates stay on the card origin."""
+    c.saveState()
+    c.translate(x, y)
+    c.setFillColor(CREAM)
+    c.roundRect(0, 0, w, h, 12, stroke=0, fill=1)
+    c.setStrokeColor(NAVY)
+    c.setLineWidth(2.4)
+    c.roundRect(1.5, 1.5, w - 3, h - 3, 11, stroke=1, fill=0)
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(0.9)
+    c.roundRect(6, 6, w - 12, h - 12, 8, stroke=1, fill=0)
+    c.restoreState()
+
+
+def _header_band(c, w, h, banner_h, label, sub):
+    """Navy header banner nested inside the card frame."""
+    inset = 16
+    top = h - 8
+    bot = top - banner_h
+    c.saveState()
+    c.setFillColor(NAVY)
+    c.roundRect(inset, bot, w - 2 * inset, banner_h, 8, stroke=0, fill=1)
+    c.setFillColor(GOLD)
+    c.setFont(FONT_TB, 15)
+    c.drawCentredString(w / 2, top - 15, label)
+    c.setFillColor(GOLD_LIGHT)
+    c.setLineWidth(0.9)
+    c.line(w / 2 - 74, top - 21, w / 2 + 74, top - 21)
+    c.setFillColor(colors.white)
+    c.setFont(FONT_TR, 8)
+    c.drawCentredString(w / 2, top - 33, sub)
+    # Corner monogram ring.
+    c.setFillColor(GOLD)
+    c.circle(w - inset - 18, top - 15, 10, stroke=0, fill=1)
+    c.setFillColor(NAVY)
+    c.setFont(FONT_TB, 7)
+    c.drawCentredString(w - inset - 18, top - 18, "EFA")
+    c.restoreState()
+
+
+def _field_label(c, text, x, y, right=False):
+    c.setFillColor(GOLD)
+    c.setFont(FONT_TR, 7)
+    if right:
+        c.drawRightString(x, y, text)
+    else:
+        c.drawString(x, y, text)
+
+
 def build_id_card_pdf(student_full_name: str, student_id: str, grade: str, avatar_url: str) -> bytes:
-    """A wallet-style ID card sheet: front face + reverse-side terms."""
-    card_w, card_h = 340, 215
+    """A wallet-style ID card sheet: a decorated front face + reverse-side terms."""
+    card_w, card_h = 360, 225
     page_w, page_h = portrait(A4)
     c = canvas.Canvas(io.BytesIO(), pagesize=(page_w, page_h))
     x0 = (page_w - card_w) / 2
     y_front = page_h - 250  # front card bottom
+    inset = 16
+    session = _session_label()
 
-    def _card_base(y):
-        c.saveState()
-        c.translate(x0, y)
-        c.setFillColor(colors.white)
-        c.roundRect(0, 0, card_w, card_h, 10, stroke=0, fill=1)
-        c.setStrokeColor(NAVY)
-        c.setLineWidth(2)
-        c.roundRect(0, 0, card_w, card_h, 10, stroke=1, fill=0)
-        return c
+    initials = "".join(p[:1] for p in student_full_name.split()[:2]).upper() or "EF"
+    hid = (student_id or "").replace(" ", "")
+    if not hid:
+        hid = f"L-{(int.from_bytes(hashlib.sha256(student_full_name.encode()).digest()[:2], 'big') % 9000) + 1000}"
 
-    # ---- Front face ----
-    c = _card_base(y_front)
-    c.setFillColor(NAVY)
-    c.rect(0, card_h - 46, card_w, 46, stroke=0, fill=1)
-    c.setFillColor(GOLD_LIGHT)
-    c.setFont(FONT_TB, 16)
-    c.drawCentredString(card_w / 2, card_h - 33, SCHOOL_NAME)
-    c.setFont(FONT_TR, 8.5)
-    c.setFillColor(colors.white)
-    c.drawCentredString(card_w / 2, card_h - 12, "COMMON EXAMINATION IDENTITY CARD")
+    # ============================= FRONT FACE =============================
+    _card_back(c, x0, y_front, card_w, card_h)
+    c.saveState()
+    c.translate(x0, y_front)
 
-    initials = "".join(p[:1] for p in student_full_name.split()[:2]) or "EF"
-    _draw_photo(c, initials, avatar_url, 52, 90, 34)
-
-    c.setFillColor(SLATE)
-    c.setFont(FONT_TR, 8.5)
-    c.drawString(102, card_h - 62, "STUDENT NAME")
-    c.setFillColor(INK)
-    c.setFont(FONT_TB, 13)
-    c.drawString(102, card_h - 76, student_full_name)
-
-    c.setFillColor(SLATE)
-    c.setFont(FONT_TR, 8.5)
-    c.drawString(102, card_h - 98, "STUDENT ID")
-    c.setFillColor(NAVY)
-    c.setFont(FONT_TB, 15)
-    c.drawString(102, card_h - 114, student_id)
-
-    y_line = 66
-    c.setFillColor(SLATE)
-    c.setFont(FONT_TR, 8.5)
-    c.drawString(20, y_line, f"Grade: {grade or '—'}")
-    c.setFillColor(NAVY)
-    c.setFont(FONT_TB, 12)
-    c.drawRightString(card_w - 20, y_line, "LEARNER")
-    c.setFont(FONT_TR, 8)
-    c.setFillColor(SLATE)
-    c.drawRightString(card_w - 20, y_line - 13, "Valid academic session")
+    # Faint watermark crest on the right of the card body.
+    c.saveState()
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(0.8)
+    c.circle(card_w - 52, 118, 40, stroke=1, fill=0)
+    c.circle(card_w - 52, 118, 31, stroke=1, fill=0)
+    c.setFillColor(GOLD)
+    c.setFont(FONT_TB, 10)
+    c.drawCentredString(card_w - 52, 115, "EFA")
     c.restoreState()
 
-    # ---- Reverse face ----
-    y_back = y_front - card_h - 34
-    _card_base(y_back)
-    c.setFillColor(NAVY)
-    c.setFont(FONT_TB, 12)
-    c.drawString(16, card_h - 26, "CARD TERMS")
-    terms = [
-        "Present this card to attend live classes and sit examinations.",
-        "This card identifies the holder as a registered learner of",
-        "Exam Focus Academy. It carries no cash value and is non-transferable.",
-        "Loss should be reported to the academy immediately; ID cards are",
-        "issued to students who verify their enrolment and take a quiz.",
-        "If found, please return this card to the academy reception.",
-    ]
-    c.setFont(FONT_TR, 9)
+    _header_band(c, card_w, card_h, 40, SCHOOL_NAME, "STUDENT IDENTITY CARD")
+
+    # Gold divider under the header.
+    c.saveState()
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(1)
+    c.line(inset, card_h - 66, card_w - inset, card_h - 66)
+    c.restoreState()
+
+    # Photo with double ring.
+    _draw_photo(c, initials, avatar_url, 60, 126, 30)
+
+    # Text column.
+    _field_label(c, "STUDENT NAME", 102, 150)
     c.setFillColor(INK)
-    ty = card_h - 46
-    for line in terms:
-        c.drawString(16, ty, line)
-        ty -= 13
+    c.setFont(FONT_TB, 13.5)
+    c.drawString(102, 134, student_full_name)
+
+    _field_label(c, "STUDENT ID", 102, 112)
+    c.setFillColor(NAVY)
+    c.setFont(FONT_TB, 17)
+    c.drawString(102, 96, hid)
+
+    _field_label(c, "GRADE", 102, 70)
+    c.setFillColor(INK)
+    c.setFont(FONT_TB, 12)
+    c.drawString(102, 56, grade or "—")
+
+    _field_label(c, "ACADEMIC SESSION", card_w - 115, 70, right=True)
+    c.setFillColor(INK)
+    c.setFont(FONT_TB, 12)
+    c.drawRightString(card_w - 115, 56, session)
+
+    # Barcode on the right edge above the footer band.
+    bcx, bcy = 300, 54
+    c.saveState()
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(0.8)
+    c.line(bcx - 50, bcy, bcx + 50, bcy)
+    c.restoreState()
+    _barcode(c, f"{hid}:{student_full_name}", bcx, bcy + 6, 96, 16)
     c.setFillColor(SLATE)
+    c.setFont(FONT_TR, 7.5)
+    c.drawCentredString(bcx, bcy - 9, hid)
+
+    # Footer band.
+    c.saveState()
+    c.setFillColor(NAVY)
+    c.rect(0, 0, card_w, 24, stroke=0, fill=1)
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(0.9)
+    c.line(0, 24, card_w, 24)
+    c.setFillColor(colors.white)
+    c.setFont(FONT_TB, 11)
+    c.drawString(inset, 14, "LEARNER")
     c.setFont(FONT_TR, 8.5)
-    c.drawString(16, 18, "Issued by Exam Focus Academy")
+    c.drawRightString(card_w - inset, 14, f"VALID ACADEMIC SESSION {session}")
+    c.restoreState()
+
+    c.restoreState()
+
+    # ============================ REVERSE FACE ============================
+    y_back = y_front - card_h - 34
+    _card_back(c, x0, y_back, card_w, card_h)
+    c.saveState()
+    c.translate(x0, y_back)
+
+    c.setFillColor(NAVY)
+    c.roundRect(inset, card_h - 46, card_w - 2 * inset, 30, 8, stroke=0, fill=1)
+    c.setFillColor(colors.white)
+    c.setFont(FONT_TB, 12)
+    c.drawString(inset + 12, card_h - 24, "CARD TERMS & INFORMATION")
+    c.setFillColor(GOLD_LIGHT)
+    c.setFont(FONT_TR, 7.5)
+    c.drawString(inset + 12, card_h - 34, "Presented card of registered learner")
+
+    c.saveState()
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(0.9)
+    c.line(inset, card_h - 54, card_w - inset, card_h - 54)
+    c.restoreState()
+
+    terms = [
+        "Present this card to attend live classes, tutorials and examinations.",
+        "It identifies the holder as a registered learner of Exam Focus Academy.",
+        "This card carries no cash value and is non-transferable.",
+        "ID cards are created automatically when a student uploads a profile photo.",
+        "Please report or return a lost card to the academy reception immediately.",
+    ]
+    ty = card_h - 68
+    c.saveState()
+    c.setFillColor(GOLD)
+    for line in terms:
+        wrapped = _wrap(c, line, FONT_TR, 9, card_w - 2 * inset - 24)
+        for wline in wrapped:
+            c.setFillColor(GOLD)
+            c.rect(inset + 3, ty + 2, 3, 3, stroke=0, fill=1)
+            c.setFillColor(INK)
+            c.setFont(FONT_TR, 9)
+            c.drawString(inset + 14, ty, wline)
+            ty -= 13
+    c.restoreState()
+
+    c.saveState()
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(0.8)
+    c.line(inset, ty - 6, card_w - inset, ty - 6)
+    c.restoreState()
+
+    c.setFillColor(SLATE)
+    c.setFont(FONT_TR, 8)
+    c.drawString(inset, ty - 22, "ISSUED TO")
+    c.setFillColor(INK)
+    c.setFont(FONT_TB, 11)
+    c.drawString(inset + 58, ty - 22, student_full_name)
+    c.setFillColor(SLATE)
+    c.setFont(FONT_TR, 8)
+    c.drawString(inset, ty - 36, f"STUDENT ID: {hid}")
+    c.setFillColor(SLATE)
+    c.setFont(FONT_TR, 8)
+    c.drawString(inset, ty - 50, f"Generated from profile photo · {_today()}")
+
+    c.saveState()
+    c.setFillColor(GOLD_LIGHT)
+    c.rect(0, 0, card_w, 16, stroke=0, fill=1)
+    c.setFillColor(NAVY)
+    c.setFont(FONT_TR, 8)
+    c.drawCentredString(card_w / 2, 4.5, "This card is the property of Exam Focus Academy · Please return if found")
+    c.restoreState()
+
     c.restoreState()
 
     c.showPage()

@@ -1,11 +1,40 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../store'
-import DocViewer from './DocViewer'
 
 const THEMES = {
   light: { bg: 'bg-white', text: 'text-slate-700', title: 'text-navy-900', chip: 'bg-white', border: 'border-slate-200' },
   sepia: { bg: 'bg-[#f8f0e3]', text: 'text-[#4a3b2a]', title: 'text-[#2f2417]', chip: 'bg-[#fbf5ea]', border: 'border-[#e4d7c0]' },
   dark: { bg: 'bg-navy-950', text: 'text-slate-300', title: 'text-white', chip: 'bg-navy-900', border: 'border-navy-800' },
+}
+
+function blockKeys() {
+  const onKey = (e) => {
+    const k = e.key?.toLowerCase()
+    if ((e.ctrlKey || e.metaKey) && ['p', 's', 'u'].includes(k)) e.preventDefault()
+  }
+  const onCtx = (e) => e.preventDefault()
+  window.addEventListener('keydown', onKey)
+  window.addEventListener('contextmenu', onCtx)
+  return () => {
+    window.removeEventListener('keydown', onKey)
+    window.removeEventListener('contextmenu', onCtx)
+  }
+}
+
+function watermarkBg(name) {
+  const label = (name || '').split('@')[0] || 'Exam Focus'
+  const parts = []
+  for (let i = 0; i < 3; i++) parts.push(i === 0 ? label : name || '')
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='420' height='300'>` +
+    parts
+      .map(
+        (p, i) =>
+          `<text x='210' y='${105 + i * 90}' fill='#1e3a8a' fill-opacity='0.07' font-size='22' font-weight='700' ` +
+          `text-anchor='middle' font-family='system-ui, sans-serif' transform='rotate(-24 210 ${105 + i * 90})'>${p}</text>`
+      )
+      .join('')
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
 }
 
 function stripHtml(html) {
@@ -25,8 +54,10 @@ export default function Reader({ lesson, completed, onComplete, onNext }) {
   const { user } = useAuth()
 
   const t = THEMES[theme]
+  useEffect(() => blockKeys(), [])
   const words = useMemo(() => stripHtml(lesson.content).split(/\s+/).filter(Boolean).length, [lesson.content])
   const mins = readingTime(words)
+  const watermark = user?.full_name ? watermarkBg(`${user.full_name} · ${user.email || ''}`) : null
 
   const btn = (active, on, labelLight, labelDark) => (
     <button
@@ -59,33 +90,16 @@ export default function Reader({ lesson, completed, onComplete, onNext }) {
         </div>
       </div>
 
-      <div className={`${t.bg} ${t.text} px-6 py-8 sm:px-10 sm:py-10`}>
+      <div className={`${t.bg} ${t.text} select-none px-6 py-8 sm:px-10 sm:py-10`} onContextMenu={(e) => e.preventDefault()} style={{ backgroundImage: watermark, backgroundRepeat: 'repeat' }}>
         <h2 className={`text-3xl font-black ${t.title}`}>{lesson.title}</h2>
         <p className="mt-1 text-sm font-medium text-slate-400">{lesson.duration_min ? `${lesson.duration_min} min class` : 'Lesson'}</p>
         <hr className={`my-6 ${theme === 'dark' ? 'border-navy-800' : 'border-slate-200'}`} />
         <div
-          className={`leading-relaxed ${theme === 'dark' ? 'prose-invert prose-slate' : 'prose-slate'} prose max-w-none`}
+          className={`leading-relaxed ${theme === 'dark' ? 'prose-invert prose-slate' : 'prose-slate'} prose max-w-none [&_a]:pointer-events-none [&_a]:no-underline`}
           style={{ fontSize: `${size}px`, lineHeight: 1.7 }}
           dangerouslySetInnerHTML={{ __html: lesson.content }}
         />
-
-        {lesson.attachment_url && (
-          <div className={`mt-8 rounded-xl border ${t.border} ${t.chip} p-4`}>
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-bold text-navy-900">📄 Lesson document</span>
-              {lesson.attachment_url.toLowerCase().endsWith('.pdf') ? (
-                <span className="chip bg-slate-100 text-slate-600">View on platform only</span>
-              ) : (
-                <a href={lesson.attachment_url} target="_blank" rel="noreferrer" className="btn-outline !px-4 !py-1.5 text-xs">
-                  Open document
-                </a>
-              )}
-            </div>
-            {lesson.attachment_url.toLowerCase().endsWith('.pdf') && (
-              <DocViewer url={lesson.attachment_url} title={lesson.title} watermark={`${user?.full_name || ''} · ${user?.email || ''}`} />
-            )}
-          </div>
-        )}
+        <p className="mt-6 text-[11px] font-medium text-slate-400">🔒 Reading protected · downloads disabled</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 px-5 py-4">

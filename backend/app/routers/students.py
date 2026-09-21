@@ -241,6 +241,15 @@ def _pdf_response(pdf_bytes: bytes, filename: str) -> Response:
     )
 
 
+def _latest_certificate(db: Session, student_id: int, kind: str) -> Certificate | None:
+    return (
+        db.query(Certificate)
+        .filter(Certificate.student_id == student_id, Certificate.kind == kind)
+        .order_by(Certificate.created_at.desc())
+        .first()
+    )
+
+
 def _slug(text: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]+", "-", text).strip("-").lower() or "student"
 
@@ -254,15 +263,19 @@ def download_certificate(
     student = _get_learner(db, student_id)
     if not _can_view(db, current, student):
         raise HTTPException(status_code=403, detail="You cannot download this certificate")
-    latest = (
-        db.query(Certificate)
-        .filter(Certificate.student_id == student.id, Certificate.kind == "certificate")
-        .order_by(Certificate.created_at.desc())
-        .first()
-    )
-    course_title = latest.course_title if latest else ""
-    pdf = build_certificate_pdf(student.full_name, course_title, current.full_name)
+    latest = _latest_certificate(db, student.id, "certificate")
+    if not latest:
+        raise HTTPException(status_code=404, detail="No certificate has been awarded yet")
+    pdf = build_certificate_pdf(student.full_name, latest.course_title, current.full_name)
     return _pdf_response(pdf, f"certificate-{_slug(student.full_name)}.pdf")
+
+
+# Alias used by the learner/parent dashboards (same download, no .pdf suffix).
+@router.get("/{student_id}/certificate")
+def download_certificate_alias(
+    student_id: int, db: Session = Depends(get_db), current: User = Depends(get_current_user)
+):
+    return download_certificate(student_id, db, current)
 
 
 @router.get("/{student_id}/id-card.pdf")
@@ -274,5 +287,18 @@ def download_id_card(
     student = _get_learner(db, student_id)
     if not _can_view(db, current, student):
         raise HTTPException(status_code=403, detail="You cannot download this ID card")
+    if not _latest_certificate(db, student.id, "id_card"):
+        raise HTTPException(
+            status_code=404,
+            detail="No ID card has been generated yet. Upload a profile photo to create one.",
+        )
     pdf = build_id_card_pdf(student.full_name, student.student_id or "", student.grade, student.avatar)
     return _pdf_response(pdf, f"id-card-{_slug(student.full_name)}.pdf")
+
+
+# Alias used by the learner/parent dashboards (id_card instead of id-card).
+@router.get("/{student_id}/id_card")
+def download_id_card_alias(
+    student_id: int, db: Session = Depends(get_db), current: User = Depends(get_current_user)
+):
+    return download_id_card(student_id, db, current)

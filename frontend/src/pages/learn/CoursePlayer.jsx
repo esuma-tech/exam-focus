@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../../api'
 import { useAuth } from '../../store'
-import DocViewer from '../../components/DocViewer'
+import AttachmentViewer from '../../components/AttachmentViewer'
 import Forum from '../../components/Forum'
 import Reader from '../../components/Reader'
 import { Loading, ProgressBar } from '../../components/ui'
@@ -20,7 +20,7 @@ export default function CoursePlayer() {
   const [quizzes, setQuizzes] = useState([])
   const [live, setLive] = useState([])
   const [lesson, setLesson] = useState(null)
-  const [readMode, setReadMode] = useState(view === 'read')
+  const [mode, setMode] = useState('video') // video | read | doc
   const [tab, setTab] = useState('Lessons')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -48,11 +48,22 @@ export default function CoursePlayer() {
         if (view === 'video') initial = all.find((l) => l.video_url) || initial
         else if (view === 'read') initial = all.find((l) => l.attachment_url || l.content) || initial
         setLesson(initial)
-        setReadMode(view === 'read')
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [id, view])
+
+  // When the lesson changes, pick a sensible material mode from the deep-link
+  // intent (view=video / view=read) or the first available material.
+  useEffect(() => {
+    if (!lesson) return
+    const available = []
+    if (lesson.video_url) available.push('video')
+    if (lesson.content) available.push('read')
+    if (lesson.attachment_url) available.push('doc')
+    const preferred = view === 'video' ? 'video' : view === 'read' ? 'read' : (lesson.video_url ? 'video' : 'read')
+    setMode(available.includes(preferred) ? preferred : available[0] || 'video')
+  }, [lesson?.id])
 
   const allLessons = useMemo(() => course?.modules.flatMap((m) => m.lessons) || [], [course])
   const completed = new Set(enrollment?.completed_lesson_ids || [])
@@ -182,32 +193,43 @@ export default function CoursePlayer() {
           </aside>
 
           <div className="lg:col-span-2">
-            <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-white p-1 ring-1 ring-slate-200 sm:w-80">
-              <button
-                onClick={() => setReadMode(false)}
-                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition ${
-                  !readMode ? 'bg-navy-800 text-white' : 'text-slate-500 hover:text-navy-900'
-                }`}
-              >
-                🎬 Video class
-              </button>
-              <button
-                onClick={() => setReadMode(true)}
-                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition ${
-                  readMode ? 'bg-navy-800 text-white' : 'text-slate-500 hover:text-navy-900'
-                }`}
-              >
-                📖 Read lesson
-              </button>
+            <div className="mb-4 flex flex-wrap gap-2 rounded-xl bg-white p-1 ring-1 ring-slate-200 sm:w-auto">
+              {lesson.video_url && (
+                <button
+                  onClick={() => setMode('video')}
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition ${
+                    mode === 'video' ? 'bg-navy-800 text-white' : 'text-slate-500 hover:text-navy-900'
+                  }`}
+                >
+                  🎬 Video class
+                </button>
+              )}
+              {lesson.content && (
+                <button
+                  onClick={() => setMode('read')}
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition ${
+                    mode === 'read' ? 'bg-navy-800 text-white' : 'text-slate-500 hover:text-navy-900'
+                  }`}
+                >
+                  📖 Read lesson
+                </button>
+              )}
+              {lesson.attachment_url && (
+                <button
+                  onClick={() => setMode('doc')}
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition ${
+                    mode === 'doc' ? 'bg-navy-800 text-white' : 'text-slate-500 hover:text-navy-900'
+                  }`}
+                >
+                  📄 Document
+                </button>
+              )}
             </div>
             {lesson ? (
-              readMode ? (
-                <Reader lesson={lesson} completed={completed} onComplete={markComplete} onNext={gotoNext} />
-              ) : (
-              <article className="card p-8">
-                <h2 className="text-2xl font-black text-navy-900">{lesson.title}</h2>
-                <p className="mt-1 text-sm font-medium text-slate-500">{lesson.duration_min ? `${lesson.duration_min} min` : ''}</p>
-                {lesson.video_url && (
+              mode === 'video' && lesson.video_url ? (
+                <article className="card p-8">
+                  <h2 className="text-2xl font-black text-navy-900">{lesson.title}</h2>
+                  <p className="mt-1 text-sm font-medium text-slate-500">{lesson.duration_min ? `${lesson.duration_min} min` : ''}</p>
                   <div className="relative mt-5 select-none" onContextMenu={(e) => e.preventDefault()}>
                     <video
                       className="w-full rounded-xl bg-black"
@@ -225,34 +247,37 @@ export default function CoursePlayer() {
                       </span>
                     )}
                   </div>
-                )}
-                <div className="prose prose-slate mt-6 max-w-none text-slate-600" dangerouslySetInnerHTML={{ __html: lesson.content }} />
-                {lesson.attachment_url && (
-                  <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-sm font-bold text-navy-900">📄 Lesson document</span>
-                      {lesson.attachment_url.toLowerCase().endsWith('.pdf') ? (
-                        <span className="chip bg-slate-100 text-slate-600">View on platform only</span>
-                      ) : (
-                        <a href={lesson.attachment_url} target="_blank" rel="noreferrer" className="btn-outline !px-4 !py-1.5 text-xs">
-                          Open document
-                        </a>
-                      )}
-                    </div>
-                    {lesson.attachment_url.toLowerCase().endsWith('.pdf') && (
-                      <DocViewer url={lesson.attachment_url} title={lesson.title} watermark={`${user?.full_name || ''} · ${user?.email || ''}`} />
+                  <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-6">
+                    {completed.has(lesson.id) ? (
+                      <span className="chip bg-emerald-100 text-emerald-700">✓ Completed</span>
+                    ) : (
+                      <button className="btn-navy" onClick={markComplete}>Mark as complete</button>
                     )}
+                    <button className="btn-primary" onClick={gotoNext}>Next lesson →</button>
                   </div>
-                )}
-                <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-6">
-                  {completed.has(lesson.id) ? (
-                    <span className="chip bg-emerald-100 text-emerald-700">✓ Completed</span>
-                  ) : (
-                    <button className="btn-navy" onClick={markComplete}>Mark as complete</button>
-                  )}
-                  <button className="btn-primary" onClick={gotoNext}>Next lesson →</button>
-                </div>
-              </article>
+                </article>
+              ) : mode === 'doc' && lesson.attachment_url ? (
+                <article className="card p-8">
+                  <h2 className="text-2xl font-black text-navy-900">{lesson.title}</h2>
+                  <p className="mt-1 text-sm font-medium text-slate-500">Lesson document</p>
+                  <AttachmentViewer
+                    url={lesson.attachment_url}
+                    title={lesson.title}
+                    watermark={`${user?.full_name || ''} · ${user?.email || ''}`}
+                  />
+                  <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-6">
+                    {completed.has(lesson.id) ? (
+                      <span className="chip bg-emerald-100 text-emerald-700">✓ Completed</span>
+                    ) : (
+                      <button className="btn-navy" onClick={markComplete}>Mark as complete</button>
+                    )}
+                    <button className="btn-primary" onClick={gotoNext}>Next lesson →</button>
+                  </div>
+                </article>
+              ) : mode === 'read' && lesson.content ? (
+                <Reader lesson={lesson} completed={completed} onComplete={markComplete} onNext={gotoNext} />
+              ) : (
+                <p className="text-slate-500">No materials to show for this lesson.</p>
               )
             ) : (
               <p className="text-slate-500">No lessons in this course yet.</p>

@@ -143,6 +143,36 @@ def upload_avatar(
     current.avatar = url
     db.commit()
     db.refresh(current)
+
+    # A student's ID card is generated automatically the moment they upload a
+    # profile photo, so every student with a picture has an ID card to download.
+    if current.role == "learner":
+        existing = (
+            db.query(Certificate)
+            .filter(Certificate.student_id == current.id, Certificate.kind == "id_card")
+            .first()
+        )
+        if not existing:
+            db.add(
+                Certificate(
+                    kind="id_card",
+                    course_title="",
+                    student_id=current.id,
+                    issued_by=current.id,
+                )
+            )
+            db.add(
+                AnalyticsEvent(
+                    event_name="id_card.generated",
+                    entity="certificate",
+                    entity_id=current.id,
+                    user_id=current.id,
+                    meta={"kind": "id_card", "trigger": "avatar_upload"},
+                )
+            )
+            db.commit()
+            db.refresh(current)
+
     return {"avatar": url}
 
 

@@ -27,6 +27,9 @@ frontend/dist/*.map
 backend/uploads/*
 !backend/uploads/.gitkeep
 
+# Scratch / sample documents that must never be committed
+sample-questions.docx
+
 # Editors / OS
 .vscode/
 .idea/

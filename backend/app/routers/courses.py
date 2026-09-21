@@ -393,17 +393,41 @@ def _parse_range(range_header: str | None, size: int) -> tuple[int | None, int |
     return start, end
 
 
-def _stream_s3(key: str, range_header: str | None) -> StreamingResponse:
+# Some upload pipelines store .docx/.doc/.pdf objects as application/octet-stream,
+# which makes browsers download instead of stream; map common extensions back.
+_EXT_CONTENT_TYPES = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".doc": "application/msword",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".txt": "text/plain; charset=utf-8",
+}
+
+
+def _content_type(key_or_url: str, stored: str | None) -> str:
+    guessed = mimetypes.guess_type(key_or_url)[0] or stored or ""
+    if guessed and "text/plain" not in guessed and "application/octet-stream" not in guessed:
+        return guessed
+    suffix = Path(key_or_url).suffix.lower()
+    return _EXT_CONTENT_TYPES.get(suffix) or guessed or "application/octet-stream"
+
+
+def _stream_s3(key: str, range_header: str | None, inline_name: str | None = None) -> StreamingResponse:
     client = storage._client()
     head = client.head_object(Bucket=settings.STORAGE_BUCKET, Key=key)
     size = int(head["ContentLength"])
-    content_type = head.get("ContentType") or mimetypes.guess_type(key)[0] or "application/octet-stream"
+    content_type = _content_type(key, head.get("ContentType"))
 
     headers = {
         "Accept-Ranges": "bytes",
         "Content-Type": content_type,
         "X-Content-Type-Options": "nosniff",
     }
+    if inline_name:
+        headers["Content-Disposition"] = f'inline; filename="{inline_name}"'
     start, end = _parse_range(range_header, size)
     if range_header and start is None:
         raise HTTPException(
@@ -458,16 +482,17 @@ def lesson_media(
     if not url:
         raise HTTPException(status_code=404, detail="No media for this lesson")
 
+    inline_name = Path(url).name if kind == "file" else None
     key = storage.key_from_url(url)
     if key:
-        return _stream_s3(key, range_header)
+        return _stream_s3(key, range_header, inline_name)
 
     filename = Path(url).name
     local = Path(settings.UPLOAD_DIR).resolve() / filename
     if not local.exists():
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(
-        local,
-        media_type=mimetypes.guess_type(url)[0] or "application/octet-stream",
-        headers={"X-Content-Type-Options": "nosniff"},
-    )
+    media_type = _content_type(url, None)
+    headers = {"X-Content-Type-Options": "nosniff"}
+    if inline_name:
+        headers["Content-Disposition"] = f'inline; filename="{inline_name}"'
+    return FileResponse(local, media_type=media_type, headers=headers)
